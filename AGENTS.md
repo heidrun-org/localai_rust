@@ -8,8 +8,8 @@ The skill names no detail of this repository: it reads the values of this reposi
 ### Issue Fix Workflow values
 
 - Target branch: main
-- Worktree creation command: `git worktree add .agents/worktrees/<branch> -b <branch> main`
+- Worktree creation command: `pnpm worktree:create <branch> --base main`
 - Worktree folder: `.agents/worktrees/<branch>`
-- Launch command: `cd .agents/worktrees/<branch> && pnpm install && pnpm test`
+- Launch command: `cd .agents/worktrees/<branch> && pnpm test`
 - Issue tracker commands: `gh issue view`, `gh issue comment`, `gh issue create`, `gh pr create`, `gh pr merge --merge`, `gh issue close` (all with `--repo heidrun-org/localai_rust`)
 - Chat rename: not available

@@ -4,6 +4,12 @@
   "license": "MIT",
   "scripts": {
     "test": "pnpm --recursive test",
-    "test:full": "pnpm --recursive test:full"
+    "test:full": "pnpm --recursive test:full",
+    "worktree:create": "tsx packages/worktree_tools/src/worktree_create_cli.ts",
+    "target:clean": "tsx packages/worktree_tools/src/target_clean_cli.ts",
+    "target:prune": "tsx packages/worktree_tools/src/target_prune_cli.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
   }
 }

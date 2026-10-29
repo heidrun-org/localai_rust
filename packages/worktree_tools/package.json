@@ -1,0 +1,26 @@
+{
+  "name": "worktree_tools",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "worktree_create": "./src/worktree_create_cli.ts",
+    "target_clean": "./src/target_clean_cli.ts",
+    "target_prune": "./src/target_prune_cli.ts"
+  },
+  "scripts": {
+    "test": "vitest run --minWorkers=1 --maxWorkers=4"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "vitest": "^2.1.9"
+  }
+}
