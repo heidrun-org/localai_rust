@@ -10,6 +10,4 @@ importers:
 
   packages/localai_decisions: {}
 
-  packages/localai_decisions_candle: {}
-
   packages/localai_embeddings: {}
