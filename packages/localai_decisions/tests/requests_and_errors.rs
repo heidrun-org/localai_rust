@@ -48,6 +48,7 @@ fn images_are_refused() {
 }
 
 #[test]
+#[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn a_prompt_larger_than_the_batch_is_refused() {
     let engine = DecisionEngine::load(DecisionConfig {
         batch_size: 32,

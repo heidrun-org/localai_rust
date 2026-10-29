@@ -15,6 +15,7 @@ fn json_output(output: std::process::Output) -> Value {
 }
 
 #[test]
+#[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn the_short_form_asks_one_choice_question() {
     let output = tool()
         .args(["--text", "I was charged twice.", "--question", "Which team?", "--choices", "billing,shipping"])
@@ -26,6 +27,7 @@ fn the_short_form_asks_one_choice_question() {
 }
 
 #[test]
+#[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn the_short_form_without_choices_asks_a_yes_or_no_question() {
     let output = tool().args(["--text", "I am very angry!", "--question", "Is the customer angry?"]).output().unwrap();
     let noul = json_output(output)["answers"]["question"]["noul"].as_f64().unwrap();
@@ -33,6 +35,7 @@ fn the_short_form_without_choices_asks_a_yes_or_no_question() {
 }
 
 #[test]
+#[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn a_request_comes_from_a_file_or_from_standard_input() {
     let request = r#"{"state": "The screen stays black.", "questions": {"q": {"type": "choice", "instructions": "Area?", "criteria": {"hardware": null, "billing": null}}}}"#;
     let path = std::env::temp_dir().join(format!("localai_decisions_request_{}.json", std::process::id()));

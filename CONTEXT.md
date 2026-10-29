@@ -9,7 +9,7 @@ Rust libraries and command line tools that run AI models on the computer.
 - `.agents/skills/`: the skills of the coding agent plugin for Codex, copied from [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin).
 - `.claude/skills/`: the same skills for Claude Code.
 - `AGENTS.md`: the values of the Issue Fix Workflow of this repository.
-- Command to test all the packages: `pnpm test`
+- Command to test all the packages: `pnpm test` (fast tests), `pnpm test:full` (all the tests)
 
 ## Rules
 - No package imports another package of this repository.

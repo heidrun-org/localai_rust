@@ -6,6 +6,7 @@
   "scripts": {
     "build": "cargo build --release",
     "cli": "cargo run --release --quiet --",
-    "test": "cargo test --release"
+    "test": "cargo test --release",
+    "test:full": "cargo test --release -- --include-ignored"
   }
 }
