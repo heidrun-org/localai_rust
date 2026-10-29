@@ -1,5 +1,5 @@
 [package]
-name = "localai_decisions_llamacpp"
+name = "localai_decisions"
 version = "0.3.5"
 description = "Runs the decision models based on Qwen3.5 locally with llama.cpp, a Rust library and command line tool"
 license = "MIT"
@@ -7,11 +7,11 @@ edition = "2021"
 publish = false
 
 [lib]
-name = "localai_decisions_llamacpp"
+name = "localai_decisions"
 path = "src/lib.rs"
 
 [[bin]]
-name = "localai_decisions_llamacpp"
+name = "localai_decisions"
 path = "src/main.rs"
 
 [features]
