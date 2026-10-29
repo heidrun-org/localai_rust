@@ -33,6 +33,7 @@ fn compare(path: &str, package: &Value, server: &Value, largest: &mut f64) {
 }
 
 #[test]
+#[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn answers_are_equal_to_the_server_answers() {
     let engine = DecisionEngine::load(DecisionConfig::default()).expect("the model Kev-0.8B");
     let reference = fixture("server_reference.json");

@@ -157,6 +157,9 @@ The server of llama.cpp 0.7.0 (for example from Homebrew) gives answers that dif
 
 ```bash
 pnpm --filter localai_decisions test
+pnpm --filter localai_decisions test:full
 ```
 
-The tests use a release build, because the model is too slow in a debug build. They need Kev-0.8B in the Hugging Face cache; the first run downloads it (0.81 GB). The command `pnpm test` at the root does not run these tests.
+The command `test` runs the fast tests in a few seconds: they check that the code and the model run, and they do not compare the answers with the server. The command `test:full` also runs the slow tests, marked with `#[ignore]`: the comparison with the answers of the server, and the runs of the command line tool that load the model.
+
+The tests use a release build, because the model is too slow in a debug build. They need Kev-0.8B in the Hugging Face cache; the first run downloads it (0.81 GB).

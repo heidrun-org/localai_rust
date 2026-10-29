@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "test": "pnpm --recursive test"
+    "test": "pnpm --recursive test",
+    "test:full": "pnpm --recursive test:full"
   }
 }

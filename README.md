@@ -27,6 +27,7 @@ Run each command at the root of the repository.
 
 - `pnpm --filter <package> cli`: runs the command line tool of a package.
 - `pnpm --filter <package> test`: runs the tests of a package.
-- `pnpm test`: runs the tests of all the packages.
+- `pnpm test`: runs the fast tests of all the packages. These tests check that the code and the model run.
+- `pnpm test:full`: runs all the tests, also the slow tests that compare the answers of the model with the reference answers.
 
 The tests of `localai_decisions` need a large model (0.81 GB). The first run downloads it into the Hugging Face cache. The build of `localai_decisions` needs `cmake`.
