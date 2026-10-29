@@ -1398,7 +1398,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "localai_decisions_llamacpp"
+name = "localai_decisions"
 version = "0.3.5"
 dependencies = [
  "anyhow",
