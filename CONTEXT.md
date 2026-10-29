@@ -7,10 +7,14 @@ Rust libraries and command line tools that run AI models on the computer.
 - `packages/localai_embeddings/`: text embeddings — see its own CONTEXT.md.
 - `packages/localai_decisions_candle/`: the decision model GLiNER2.5-Decide with Candle — see its own CONTEXT.md.
 - `packages/localai_decisions_llamacpp/`: the decision models based on Qwen3.5 with llama.cpp — see its own CONTEXT.md.
+- `.agents/skills/`: the skills of the coding agent plugin for Codex, copied from [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin).
+- `.claude/skills/`: the same skills for Claude Code.
+- `AGENTS.md`: the values of the Issue Fix Workflow of this repository.
 - Command to test all the packages: `pnpm test`
 
 ## Rules
 - No package imports another package of this repository.
+- The temporary worktrees of the Issue Fix Workflow are in `.agents/worktrees/`, which Git ignores.
 - Each package keeps its own `Cargo.lock` and its own `target` folder; there is no Cargo workspace at the root.
 
 ## Background
