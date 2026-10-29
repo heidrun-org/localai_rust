@@ -1,0 +1,10 @@
+# The Rust packages of this repository are one Cargo workspace, with one Cargo.lock and one target folder at the root.
+# The packages then share their compiled dependencies, and `pnpm worktree:create` clones one target folder into a new
+# worktree.
+[workspace]
+resolver = "2"
+members = [
+    "packages/localai_decisions",
+    "packages/localai_embeddings",
+    "packages/localai_llm",
+]

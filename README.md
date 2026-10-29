@@ -10,7 +10,9 @@ These packages come from the folder `packages/experiments` of [Heidrun Code](htt
 - [localai_decisions](packages/localai_decisions/README.md): runs the decision models based on Qwen3.5 with llama.cpp.
 - [localai_llm](packages/localai_llm/README.md): runs a large language model that generates text, with llama.cpp.
 
-Each package is a separate Cargo package with its own `Cargo.lock`. No package depends on another package.
+The three Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.
+
+The package [worktree_tools](packages/worktree_tools/README.md) creates a new worktree with the compiled files of the main checkout, so its first `pnpm test` compiles nothing that did not change.
 
 ## Skills of the coding agent
 
@@ -30,6 +32,9 @@ Run each command at the root of the repository.
 - `pnpm --filter <package> test`: runs the tests of a package.
 - `pnpm test`: runs the fast tests of all the packages. These tests check that the code and the model run.
 - `pnpm test:full`: runs all the tests, also the slow tests that compare the answers of the model with the reference answers.
+- `pnpm worktree:create <branch>`: creates the worktree `.agents/worktrees/<branch>` on a new branch, with a copy-on-write clone of the folder `target` of the main checkout.
+- `pnpm target:clean`: lists, and with `--yes` deletes, the folders `target` of the worktrees that no build used for 7 days.
+- `pnpm target:prune`: lists, and with `--yes` deletes, the files of the folder `target` that the current builds do not use.
 
 The tests of `localai_decisions` need a large model (0.81 GB). The first run downloads it into the Hugging Face cache. The build of `localai_decisions` needs `cmake`.
 
