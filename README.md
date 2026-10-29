@@ -12,6 +12,16 @@ These packages come from the folder `packages/experiments` of [Heidrun Code](htt
 
 Each package is a separate Cargo package with its own `Cargo.lock`. No package depends on another package.
 
+## Skills of the coding agent
+
+The folders `.agents/skills/` (for Codex) and `.claude/skills/` (for Claude Code) hold the skills of the coding agent plugin [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin), copied with this command:
+
+```bash
+npx skills add jeromeetienne/coding_agent_plugin --skill '*' --agent claude-code --agent codex --copy --yes
+```
+
+The file [AGENTS.md](AGENTS.md) gives the values of the Issue Fix Workflow of this repository.
+
 ## Commands
 
 Run each command at the root of the repository.
