@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_embeddings`
+# Directory Context: `/packages/localai_embeddings`
 
 ## Purpose
 This experiment computes text embeddings locally for future evaluation. Its Rust library and command line tool support direct text, standard input, file paths, document chunking, benchmarks, and verbose progress details.
@@ -11,7 +11,7 @@ This experiment computes text embeddings locally for future evaluation. Its Rust
 ## Rules
 - Model inference stays on the selected local backend and does not send input text to a hosted inference service.
 - The package does not depend on a package in `packages/apps`.
-- No package outside `packages/experiments` imports this package.
+- No package outside this repository imports this package.
 - Model identifiers may select only architectures and pooling configurations that this package supports.
 - Cached model files are used immediately by default; `--check-model-updates` explicitly requests an online check.
 

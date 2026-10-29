@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_embeddings/src`
+# Directory Context: `/packages/localai_embeddings/src`
 
 ## Purpose
 This folder contains the public embedding library and the command line interface.

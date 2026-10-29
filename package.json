@@ -1,0 +1,8 @@
+{
+  "name": "localai_rust",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "pnpm --recursive test"
+  }
+}

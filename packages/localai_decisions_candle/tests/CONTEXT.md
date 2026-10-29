@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_decisions_candle/tests`
+# Directory Context: `/packages/localai_decisions_candle/tests`
 
 ## Purpose
 This folder holds the Rust tests of the package, and the results of the Python package gliner2 that the tests compare with.

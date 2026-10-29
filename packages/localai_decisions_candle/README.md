@@ -118,7 +118,7 @@ Peak process resident memory covers model loading, warmup, and measured inferenc
 The processor (`--backend cpu`) is the default. On an Apple computer, the graphics chip is much faster. Build with the feature `metal` and select the backend:
 
 ```bash
-cd packages/experiments/localai_decisions_candle
+cd packages/localai_decisions_candle
 cargo run --release --features metal -- --backend metal --text "Can I get that charge refunded?" --labels refund_request,other
 ```
 

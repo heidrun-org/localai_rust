@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_decisions_llamacpp/tests`
+# Directory Context: `/packages/localai_decisions_llamacpp/tests`
 
 ## Purpose
 This folder holds the Rust tests of the package, and the answers of the server of llama.cpp that the tests compare with.

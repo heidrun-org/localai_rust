@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_decisions_llamacpp`
+# Directory Context: `/packages/localai_decisions_llamacpp`
 
 ## Purpose
 This package runs the decision models based on Qwen3.5 on the computer, with llama.cpp, a Rust library, and a command line tool. A decision model reads a text (the state) and typed questions, and returns a probability for each option, as the System One API of the server of llama.cpp (`/v1/systemone`).
@@ -18,7 +18,7 @@ This package runs the decision models based on Qwen3.5 on the computer, with lla
 - The version of `llama-cpp-sys-2` is pinned, because `src/decision.rs` copies the decision code of the llama.cpp version that it builds (v0.6.0); a new version needs the new decision code and new server answers.
 - The package supports the decision types openjev, lev, kev, nimble, and clef, and refuses every other type with an error that names it.
 - Cached model files are used at once by default; `--check-model-updates` asks Hugging Face for a newer file.
-- The package depends on no other package of this repository, and no package outside `packages/experiments` imports it.
+- The package depends on no other package of this repository, and no package outside this repository imports it.
 
 ## Background
 - The package comes from [issue #721](https://github.com/heidrun-org/heidrun/issues/721); its first test proved that the Rust binding gives the same values as the server of llama.cpp of the same version.

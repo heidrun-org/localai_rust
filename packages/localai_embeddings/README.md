@@ -1,6 +1,6 @@
 # Local AI embeddings
 
-This package is parked in `packages/experiments/localai_embeddings` for future evaluation.
+This package runs on the computer with no network call after the first download of the model.
 
 `localai_embeddings` computes embeddings on your computer with a Rust library and command line tool. It accepts ordinary text or source code as text. Input text stays on your computer. This version handles text only; code is accepted as text, but the default model was trained for natural language rather than code search.
 

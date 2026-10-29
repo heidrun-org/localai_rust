@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_decisions_candle/src`
+# Directory Context: `/packages/localai_decisions_candle/src`
 
 ## Purpose
 This folder holds the public decision library and the command line tool.

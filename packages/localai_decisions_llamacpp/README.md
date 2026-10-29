@@ -89,7 +89,7 @@ println!("{}", response["answers"]["route"]["choice"]);
 The default build runs on the processor only. A build option adds the GPU, and `--backend gpu` selects it. The existing spelling `--device gpu` works too:
 
 ```bash
-cd packages/experiments/localai_decisions_llamacpp
+cd packages/localai_decisions_llamacpp
 GGML_METAL=ON cargo run --release --features metal -- --backend gpu --text "I was charged twice." --question "Which team?" --choices billing,shipping
 ```
 

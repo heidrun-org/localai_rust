@@ -1,4 +1,4 @@
-# Directory Context: `/packages/experiments/localai_decisions_candle`
+# Directory Context: `/packages/localai_decisions_candle`
 
 ## Purpose
 This package runs the decision model GLiNER2.5-Decide on the computer with a Rust library and a command line tool. A decision model reads a text and a list of labels, and returns the label that matches the text with a probability. It writes no text.
@@ -17,8 +17,8 @@ This package runs the decision model GLiNER2.5-Decide on the computer with a Rus
 - The package loads the model type `gliner2` with the architecture `span` and a DeBERTa v2 encoder only, and refuses every other model with an error that names the unsupported part.
 - A change of the code that builds the input of the model or computes a logit must keep the tests against the Python results green.
 - Cached model files are used immediately by default; `--check-model-updates` explicitly requests an online check.
-- The package depends on no other package of this repository, and no package outside `packages/experiments` imports it.
+- The package depends on no other package of this repository, and no package outside this repository imports it.
 
 ## Background
 - The package comes from [issue #717](https://github.com/heidrun-org/heidrun/issues/717).
-- The package follows the libraries and the layout of `packages/experiments/localai_embeddings`, from [issue #631](https://github.com/heidrun-org/heidrun/issues/631).
+- The package follows the libraries and the layout of `packages/localai_embeddings`, from [issue #631](https://github.com/heidrun-org/heidrun/issues/631).
