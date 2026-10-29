@@ -1,0 +1,12 @@
+{
+  "name": "localai_llm",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "cargo build --release",
+    "cli": "cargo run --release --quiet --",
+    "test": "cargo test --release",
+    "test:full": "cargo test --release -- --include-ignored"
+  }
+}

@@ -8,6 +8,7 @@ These packages come from the folder `packages/experiments` of [Heidrun Code](htt
 
 - [localai_embeddings](packages/localai_embeddings/README.md): computes text embeddings.
 - [localai_decisions](packages/localai_decisions/README.md): runs the decision models based on Qwen3.5 with llama.cpp.
+- [localai_llm](packages/localai_llm/README.md): runs a large language model that generates text, with llama.cpp.
 
 Each package is a separate Cargo package with its own `Cargo.lock`. No package depends on another package.
 
@@ -31,3 +32,5 @@ Run each command at the root of the repository.
 - `pnpm test:full`: runs all the tests, also the slow tests that compare the answers of the model with the reference answers.
 
 The tests of `localai_decisions` need a large model (0.81 GB). The first run downloads it into the Hugging Face cache. The build of `localai_decisions` needs `cmake`.
+
+The slow tests of `localai_llm` need the model LiquidAI/LFM2.5-1.2B-Instruct (0.73 GB), which the first run downloads into the Hugging Face cache. The build of `localai_llm` needs `cmake`.

@@ -1,0 +1,33 @@
+[package]
+name = "localai_llm"
+version = "0.1.0"
+description = "Runs a large language model locally with llama.cpp, a Rust library and command line tool"
+license = "MIT"
+edition = "2021"
+publish = false
+
+[lib]
+name = "localai_llm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "localai_llm"
+path = "src/main.rs"
+
+[features]
+default = []
+# The GPU features also need the environment variable GGML_METAL, see build.rs and README.md.
+metal = ["llama-cpp-sys-2/metal"]
+cuda = ["llama-cpp-sys-2/cuda"]
+vulkan = ["llama-cpp-sys-2/vulkan"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hf-hub = { version = "1", features = ["blocking"] }
+libc = "0.2"
+# llama-cpp-sys-2 0.1.160 builds llama.cpp v0.6.0 (commit d81235049384534c167caea52b85a694f6103d14),
+# which supports the architecture lfm2 of the default model. It does not support lfm3.
+llama-cpp-sys-2 = { version = "=0.1.160", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
