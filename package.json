@@ -10,6 +10,6 @@
     "target:prune": "faster_rust_worktrees prune"
   },
   "devDependencies": {
-    "faster_rust_worktrees": "github:jeromeetienne/faster_rust_worktrees#2b5411c5c220028bd2619c35904dfa740fa044a9"
+    "faster_rust_worktrees": "github:jeromeetienne/faster_rust_worktrees#41c1bcdb891406439de73b6d692fcf2e0eae3f1c"
   }
 }

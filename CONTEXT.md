@@ -7,7 +7,7 @@ Rust libraries and command line tools that run AI models on the computer.
 - `packages/localai_embeddings/`: text embeddings — see its own CONTEXT.md.
 - `packages/localai_decisions/`: the decision models based on Qwen3.5 with llama.cpp — see its own CONTEXT.md.
 - `packages/localai_llm/`: a large language model that generates text with llama.cpp — see its own CONTEXT.md.
-- `.faster_rust_worktrees.json`: configures the shared Faster Rust Work Trees tool for the three Cargo packages. See the worktree commands in README.md.
+- `.faster_rust_worktrees.yaml`: configures the shared Faster Rust Work Trees tool for the three Cargo packages. See the worktree commands in README.md.
 - `Cargo.toml`: the Cargo workspace of the three Rust packages, with one `Cargo.lock` and one folder `target` at the root.
 - `.agents/skills/`: the skills of the coding agent plugin for Codex, copied from [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin).
 - `.claude/skills/`: the same skills for Claude Code.

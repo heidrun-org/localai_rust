@@ -12,7 +12,7 @@ These packages come from the folder `packages/experiments` of [Heidrun Code](htt
 
 The three Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.
 
-The worktree commands use a pinned version of [Faster Rust Work Trees](https://github.com/jeromeetienne/faster_rust_worktrees). The repository settings are in [.faster_rust_worktrees.json](.faster_rust_worktrees.json).
+The worktree commands use a pinned version of [Faster Rust Work Trees](https://github.com/jeromeetienne/faster_rust_worktrees). The repository settings are in [.faster_rust_worktrees.yaml](.faster_rust_worktrees.yaml).
 
 ## Skills of the coding agent
 
