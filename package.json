@@ -5,11 +5,11 @@
   "scripts": {
     "test": "pnpm --recursive test",
     "test:full": "pnpm --recursive test:full",
-    "worktree:create": "tsx packages/worktree_tools/src/worktree_create_cli.ts",
-    "target:clean": "tsx packages/worktree_tools/src/target_clean_cli.ts",
-    "target:prune": "tsx packages/worktree_tools/src/target_prune_cli.ts"
+    "worktree:create": "faster_rust_worktrees create",
+    "target:clean": "faster_rust_worktrees clean --days 7",
+    "target:prune": "faster_rust_worktrees prune"
   },
   "devDependencies": {
-    "tsx": "^4.23.15"
+    "faster_rust_worktrees": "github:jeromeetienne/faster_rust_worktrees#2b5411c5c220028bd2619c35904dfa740fa044a9"
   }
 }

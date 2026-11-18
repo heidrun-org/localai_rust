@@ -1,8 +1,15 @@
 //! Checks benchmark command discovery and validation without loading model weights.
 use std::process::Command;
 
+/// Returns a command for the executable built alongside this integration test.
 fn tool() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_localai_llm"))
+	Command::new(
+		std::env::current_exe()
+			.expect("path to the integration test executable")
+			.with_file_name("..")
+			.join("localai_llm")
+			.with_extension(std::env::consts::EXE_EXTENSION),
+	)
 }
 
 #[test]

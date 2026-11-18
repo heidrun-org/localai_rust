@@ -8,11 +8,6 @@ use serde_json::Value;
 /// the computer that wrote the fixture; the tolerance leaves room for the last digits of another processor.
 const TOLERANCE: f64 = 0.000001;
 
-fn fixture(name: &str) -> Value {
-    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
 fn compare(path: &str, package: &Value, server: &Value, largest: &mut f64) {
     match (package, server) {
         (Value::Object(a), Value::Object(b)) => {
@@ -36,8 +31,8 @@ fn compare(path: &str, package: &Value, server: &Value, largest: &mut f64) {
 #[ignore = "slow: run it with pnpm --filter localai_decisions test:full"]
 fn answers_are_equal_to_the_server_answers() {
     let engine = DecisionEngine::load(DecisionConfig::default()).expect("the model Kev-0.8B");
-    let reference = fixture("server_reference.json");
-    let requests = fixture("requests.json");
+    let reference: Value = serde_json::from_str(include_str!("fixtures/server_reference.json")).unwrap();
+    let requests: Value = serde_json::from_str(include_str!("fixtures/requests.json")).unwrap();
     let mut largest = 0.0f64;
     for (item, expected) in requests.as_array().unwrap().iter().zip(reference["results"].as_array().unwrap()) {
         assert_eq!(item["name"], expected["name"]);

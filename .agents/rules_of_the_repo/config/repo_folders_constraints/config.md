@@ -7,7 +7,6 @@
 | `packages/localai_decisions` | Runs local model decisions over supplied choices | Manages Git worktrees | no other package | Rust and Cargo, with a C++ bridge to llama.cpp | Run the package tests after changes |
 | `packages/localai_embeddings` | Produces text embeddings locally | Manages Git worktrees | no other package | Rust and Cargo | Run the package tests after changes |
 | `packages/localai_llm` | Runs local language model requests | Manages Git worktrees | no other package | Rust and Cargo | Run the package tests after changes |
-| `packages/worktree_tools` | Creates Git worktrees and cleans or prunes Cargo build output | Implements local model operations | no other package | TypeScript and pnpm | Run the package tests after changes. Remove the package after verifying the replacement in [issue #16](https://github.com/heidrun-org/localai_rust/issues/16) |
 
 ## Other folders
 
