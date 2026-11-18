@@ -12,7 +12,7 @@ Replace `<reviewed-reference>` with an available reviewed branch, tag, or full c
 
 ## Configuration
 
-Create `faster_rust_worktrees.json` at the main checkout root:
+Create `.faster_rust_worktrees.json` at the main checkout root:
 
 ```json
 {
