@@ -12,19 +12,20 @@ Replace `<reviewed-reference>` with an available reviewed branch, tag, or full c
 
 ## Configuration
 
-Create `.faster_rust_worktrees.json` at the main checkout root:
+Create `.faster_rust_worktrees.yaml` at the root of the main checkout.
 
-```json
-{
-  "baseRef": "HEAD",
-  "worktreeDirectory": ".agents/worktree",
-  "targetDirectories": ["target"],
-  "cargoCommands": [
-    { "cwd": ".", "argv": ["cargo", "build", "--locked"] },
-    { "cwd": ".", "argv": ["cargo", "test", "--locked", "--no-run"] }
-  ]
-}
+```yaml
+baseRef: HEAD
+worktreeDirectory: .agents/worktree
+targetDirectories: [target]
+cargoCommands:
+  - cwd: "."
+    argv: [cargo, build, --locked]
+  - cwd: "."
+    argv: [cargo, test, --locked, --no-run]
 ```
+
+If the default YAML file is missing, the first command that loads configuration converts an existing `.faster_rust_worktrees.json` to `.faster_rust_worktrees.yaml` and loads the new file. The original JSON file stays in place. An existing JSON configuration can also be selected with `--config .faster_rust_worktrees.json` before the subcommand.
 
 Use actual command working directories, features, profiles, and targets. Include every variant whose output cleanup must preserve. Multiple target directories are supported. Defaults are `HEAD`, `.agents/worktree`, and `["target"]`; Cargo commands are required. `--base` overrides the configured reference for one creation.
 
