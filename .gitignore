@@ -1,3 +1,4 @@
 node_modules/
 target/
 .agents/worktrees/
+.DS_Store
