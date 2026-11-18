@@ -5,8 +5,15 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
+/// Returns a command for the executable built alongside this integration test.
 fn tool() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_localai_decisions"))
+	Command::new(
+		std::env::current_exe()
+			.expect("path to the integration test executable")
+			.with_file_name("..")
+			.join("localai_decisions")
+			.with_extension(std::env::consts::EXE_EXTENSION),
+	)
 }
 
 fn json_output(output: std::process::Output) -> Value {

@@ -12,7 +12,7 @@ These packages come from the folder `packages/experiments` of [Heidrun Code](htt
 
 The three Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.
 
-The package [worktree_tools](packages/worktree_tools/README.md) creates a new worktree with the compiled files of the main checkout, so its first `pnpm test` compiles nothing that did not change.
+The worktree commands use a pinned version of [Faster Rust Work Trees](https://github.com/jeromeetienne/faster_rust_worktrees). The repository settings are in [.faster_rust_worktrees.json](.faster_rust_worktrees.json).
 
 ## Skills of the coding agent
 
@@ -32,9 +32,13 @@ Run each command at the root of the repository.
 - `pnpm --filter <package> test`: runs the tests of a package.
 - `pnpm test`: runs the fast tests of all the packages. These tests check that the code and the model run.
 - `pnpm test:full`: runs all the tests, also the slow tests that compare the answers of the model with the reference answers.
-- `pnpm worktree:create <branch>`: creates the worktree `.agents/worktrees/<branch>` on a new branch, with a copy-on-write clone of the folder `target` of the main checkout.
-- `pnpm target:clean`: lists, and with `--yes` deletes, the folders `target` of the worktrees that no build used for 7 days.
-- `pnpm target:prune`: lists, and with `--yes` deletes, the files of the folder `target` that the current builds do not use.
+- `pnpm worktree:create <branch>` creates `.agents/worktrees/<branch>` from `HEAD` and installs the locked dependencies. Pass `--base main` to start from `main`.
+- `pnpm target:clean` previews worktree build folders that have had no activity for seven days. Pass `--days <number>` to change the age.
+- `pnpm target:prune` previews obsolete Cargo build files in the current checkout using the commands in the repository settings.
+
+Run `pnpm test` in the main checkout before creating a worktree to populate the Cargo build folder. Stop the main checkout's builds before creating the worktree. On a file system that supports copy-on-write cloning, the tool reuses the available build output while keeping each worktree's files independent. Python 3 is required to preserve file times precisely.
+
+To apply a cleanup, stop the affected builds and use `--apply`. Replace the former `--yes` option with `--apply` for both commands.
 
 The tests of `localai_decisions` need a large model (0.81 GB). The first run downloads it into the Hugging Face cache. The build of `localai_decisions` needs `cmake`.
 
