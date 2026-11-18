@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## The Rules of the Repo
+
+Before every repository change, follow [rules_of_the_repo](.agents/skills/rules_of_the_repo/SKILL.md). Read the rules list and apply each relevant skill with its repository settings.
+
+- Rules list: [.agents/rules_of_the_repo/rules_list.md](.agents/rules_of_the_repo/rules_list.md)
+
 ## Issue Fix Workflow
 
 Every issue fix in this repository follows the skill [issue_fix_workflow](.agents/skills/issue_fix_workflow/SKILL.md). Read the skill before you start an issue fix, each time that the developer asks to fix an issue.
