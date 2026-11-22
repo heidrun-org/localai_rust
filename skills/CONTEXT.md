@@ -7,6 +7,7 @@ Distributable agent skills for the Heidrun Local AI Rust commands.
 - `localai_embeddings/` computes embeddings for text and files.
 - `localai_decisions/` runs yes-or-no and multiple-choice decisions.
 - `localai_llm/` generates and summarizes text.
+- `localai_rag/` searches local Markdown and plain-text collections and cites passages.
 - `localai_vector_store/` creates, populates, and searches local vector stores.
 
 ## Rules
