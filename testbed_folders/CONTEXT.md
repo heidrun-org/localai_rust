@@ -8,7 +8,8 @@ Shared test workspace for exercising the Local AI skills in Codex and Claude Cod
 
 ## Rules
 - The installed skills are copied from the repository's top-level `skills/` directory.
-- First-run setup and model files live outside the repository.
+- First-run cgx builds and model downloads use disposable cache directories outside the repository.
 
 ## Background
 - https://github.com/heidrun-org/localai_rust/issues/18
+- https://github.com/heidrun-org/localai_rust/issues/22

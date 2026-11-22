@@ -9,8 +9,9 @@ Distributable agent skills for the three Heidrun Local AI Rust commands.
 - `localai_llm/` generates and summarizes text.
 
 ## Rules
-- Each SKILL.md contains everything the agent needs to install mise, build its tool, and run it.
-- Each skill asks for explicit approval before setup or model downloads.
+- Each SKILL.md contains the cgx setup, model choices, and usage instructions for its tool.
+- Each skill obtains one explicit approval for all required setup and model downloads.
 
 ## Background
 - https://github.com/heidrun-org/localai_rust/issues/18
+- https://github.com/heidrun-org/localai_rust/issues/22
