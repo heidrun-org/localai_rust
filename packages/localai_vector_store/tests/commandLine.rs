@@ -88,10 +88,20 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 	let identifier = CommandLine::create(&parentDirectory)?;
 	let secondIdentifier = CommandLine::create(&parentDirectory)?;
 	assert_ne!(identifier, secondIdentifier);
-	let readableDirectory = parentDirectory.join(format!("test-documents--{}", &identifier[..8]));
+	let readableDirectory = parentDirectory.join(format!("test_documents__{}", &identifier[..8]));
 	assert!(readableDirectory.join("store.sqlite3").is_file());
-	let legacyDirectory = parentDirectory.join(&identifier);
+	let legacyIdentifier = identifier.replace('_', "-");
+	let legacyDirectory = parentDirectory.join(format!("test-documents--{}", &identifier[..8]));
 	fs::rename(&readableDirectory, &legacyDirectory)?;
+	{
+		let connection = rusqlite::Connection::open(legacyDirectory.join("store.sqlite3"))?;
+		let savedIdentifier: String =
+			connection.query_row("SELECT identifier FROM store_metadata", [], |row| row.get(0))?;
+		assert_eq!(savedIdentifier, identifier);
+		assert_eq!(identifier.matches('_').count(), 4);
+		assert_eq!(identifier.contains('-'), false);
+		connection.execute("UPDATE store_metadata SET identifier = ?1", [&legacyIdentifier])?;
+	}
 
 	let documentsPath = temporaryDirectory.path().join("documents.json");
 	let queryPath = temporaryDirectory.path().join("query.json");
@@ -116,7 +126,7 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 		&[
 			"add",
 			"--store",
-			&identifier,
+			&legacyIdentifier,
 			"--input",
 			documentsPathStr,
 			"--model-provider",
@@ -126,6 +136,7 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 		],
 	)?)?;
 	assert_eq!(added["inserted"], 4);
+	assert_eq!(added["store"], identifier);
 
 	let listed = CommandLine::json(CommandLine::run(&parentDirectory, &["list"])?)?;
 	assert_eq!(listed.as_array().context("Expected a list of stores")?.len(), 2);
@@ -173,7 +184,7 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 
 	fs::create_dir(&readableDirectory)?;
 	fs::write(readableDirectory.join("keep.txt"), "existing folder")?;
-	let renamedDirectory = parentDirectory.join(format!("test-documents--{}-2", &identifier[..8]));
+	let renamedDirectory = parentDirectory.join(format!("test_documents__{}_2", &identifier[..8]));
 	let renamed = CommandLine::json(CommandLine::run(
 		&parentDirectory,
 		&["rename-folder", "--store", &identifier],
@@ -190,6 +201,12 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 	assert_eq!(renamed["identifier"], identifier);
 	assert_eq!(renamed["description"], "Test documents");
 	assert_eq!(renamed["embedding_count"], 4);
+	{
+		let connection = rusqlite::Connection::open(renamedDirectory.join("store.sqlite3"))?;
+		let savedIdentifier: String =
+			connection.query_row("SELECT identifier FROM store_metadata", [], |row| row.get(0))?;
+		assert_eq!(savedIdentifier, legacyIdentifier);
+	}
 	assert_eq!(
 		CommandLine::json(CommandLine::run(
 			&parentDirectory,
@@ -346,7 +363,7 @@ fn createsStoreInDefaultApplicationDataDirectory() -> Result<()> {
 	let expectedDirectory = applicationData
 		.join("heidrun-localai-rust")
 		.join("vector-stores")
-		.join(format!("default-store--{}", &identifier[..8]));
+		.join(format!("default_store__{}", &identifier[..8]));
 	assert_eq!(
 		store["directory"].as_str().map(Path::new),
 		Some(expectedDirectory.as_path())
@@ -369,7 +386,7 @@ fn concurrentCreatesWithFallbackNamesKeepBothStores() -> Result<()> {
 	assert_ne!(first["identifier"], second["identifier"]);
 	for store in [&first, &second] {
 		let identifier = store["identifier"].as_str().context("Missing store identifier")?;
-		let expectedDirectory = parentDirectory.join(format!("store--{}", &identifier[..8]));
+		let expectedDirectory = parentDirectory.join(format!("store__{}", &identifier[..8]));
 		assert_eq!(
 			store["directory"].as_str().map(Path::new),
 			Some(expectedDirectory.as_path())
@@ -385,11 +402,14 @@ fn renameWaitsForOpenStoreToClose() -> Result<()> {
 	let temporaryDirectory = tempfile::tempdir()?;
 	let parentDirectory = temporaryDirectory.path();
 	let identifier = CommandLine::create(parentDirectory)?;
-	let readableDirectory = parentDirectory.join(format!("test-documents--{}", &identifier[..8]));
-	let legacyDirectory = parentDirectory.join(&identifier);
+	let readableDirectory = parentDirectory.join(format!("test_documents__{}", &identifier[..8]));
+	let legacyDirectory = parentDirectory.join(identifier.replace('_', "-"));
 	fs::rename(&readableDirectory, &legacyDirectory)?;
 
-	let store = localai_vector_store::Store::open(parentDirectory, uuid::Uuid::parse_str(&identifier)?)?;
+	let store = localai_vector_store::Store::open(
+		parentDirectory,
+		localai_vector_store::Store::parseIdentifier(&identifier)?,
+	)?;
 	let renameArguments = ["rename-folder", "--store", &identifier];
 	let rejected = CommandLine::run(parentDirectory, &renameArguments)?;
 	assert_eq!(rejected.status.success(), false);
