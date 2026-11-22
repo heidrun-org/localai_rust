@@ -7,5 +7,6 @@ members = [
     "packages/localai_decisions",
     "packages/localai_embeddings",
     "packages/localai_llm",
+    "packages/localai_rag",
     "packages/localai_vector_store",
 ]

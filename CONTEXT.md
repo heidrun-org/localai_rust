@@ -7,6 +7,7 @@ Rust libraries and command line tools that run AI models and search saved embedd
 - `packages/localai_embeddings/`: text embeddings — see its own CONTEXT.md.
 - `packages/localai_decisions/`: the decision models based on Qwen3.5 with llama.cpp — see its own CONTEXT.md.
 - `packages/localai_llm/`: a large language model that generates text with llama.cpp — see its own CONTEXT.md.
+- `packages/localai_rag/`: local document collection search. See its CONTEXT.md.
 - `packages/localai_vector_store/`: local embedding storage and search. See its CONTEXT.md.
 - `.faster_rust_worktrees.yaml`: configures the shared Faster Rust Work Trees tool for the Cargo workspace. See the worktree commands in README.md.
 - `Cargo.toml`: the Cargo workspace of the Rust packages, with one `Cargo.lock` and one folder `target` at the root.
@@ -20,7 +21,7 @@ Rust libraries and command line tools that run AI models and search saved embedd
 - Command to create a worktree: `pnpm worktree:create <branch>`
 
 ## Rules
-- No package imports another package of this repository.
+- Workspace package dependencies follow the [Repo Folders Constraints](.agents/rules_of_the_repo/config/repo_folders_constraints/config.md).
 - The temporary worktrees of the Issue Fix Workflow are in `.agents/worktrees/`, which Git ignores.
 - The Rust packages are one Cargo workspace, with one `Cargo.lock` and one `target` folder at the root, so a new worktree clones one target folder ([issue 14](https://github.com/heidrun-org/localai_rust/issues/14)).
 - Cargo runs in the folder of a package, as the scripts of its `package.json` do, and never at the root: at the root it does not read the `.cargo/config.toml` of the package, and it builds the shared dependencies with other features, so it compiles everything again.

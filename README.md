@@ -9,6 +9,7 @@ The model packages come from the folder `packages/experiments` of [Heidrun Code]
 - [localai_embeddings](packages/localai_embeddings/README.md): computes text embeddings.
 - [localai_decisions](packages/localai_decisions/README.md): runs the decision models based on Qwen3.5 with llama.cpp.
 - [localai_llm](packages/localai_llm/README.md): runs a large language model that generates text, with llama.cpp.
+- [localai_rag](packages/localai_rag/README.md): searches named local document collections by meaning.
 - [localai_vector_store](packages/localai_vector_store/README.md): stores and searches embeddings.
 
 The Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.

@@ -359,8 +359,118 @@ fn split_at_tokens(
     Ok(())
 }
 
+/// Splits retrieval input using source boundaries and a caller-supplied fit check.
+pub(crate) struct RetrievalSplitter;
+
+#[allow(non_snake_case)]
+impl RetrievalSplitter {
+	/// Returns contiguous byte ranges covering text. fitsFn checks the complete proposed chunk.
+	pub(crate) fn split(
+		text: &str,
+		isLineBased: bool,
+		fitsFn: impl Fn(&str) -> Result<bool>,
+	) -> Result<Vec<Range<usize>>> {
+		let mut ranges = Vec::new();
+		Self::_splitRange(text, 0..text.len(), isLineBased, 0, &fitsFn, &mut ranges)?;
+		Ok(ranges)
+	}
+
+	/// Splits range at the current boundary level and adds the largest fitting ranges to output.
+	fn _splitRange(
+		text: &str,
+		range: Range<usize>,
+		isLineBased: bool,
+		level: usize,
+		fitsFn: &impl Fn(&str) -> Result<bool>,
+		output: &mut Vec<Range<usize>>,
+	) -> Result<()> {
+		if range.is_empty() == true {
+			return Ok(());
+		}
+		if fitsFn(&text[range.clone()])? == true {
+			output.push(range);
+			return Ok(());
+		}
+		if level == 4 {
+			bail!("A source character does not fit within the model's token limit");
+		}
+		let source = &text[range.clone()];
+		let mut endOffsets = Vec::new();
+		match (isLineBased, level) {
+			(true, 0) | (false, 0) => {
+				let mut endOffset = range.start;
+				for line in source.split_inclusive('\n') {
+					endOffset += line.len();
+					if isLineBased == true || line.trim().is_empty() == true {
+						endOffsets.push(endOffset);
+					}
+				}
+			}
+			(false, 1) => {
+				let mut endOffset = range.start;
+				for sentence in source.split_inclusive('.') {
+					endOffset += sentence.len();
+					endOffsets.push(endOffset);
+				}
+			}
+			(false, 2) => {
+				endOffsets.extend(source.char_indices().filter_map(|(index, character)| {
+					character.is_whitespace().then_some(range.start + index + character.len_utf8())
+				}));
+			}
+			(_, 3) => {
+				endOffsets.extend(source.char_indices().map(|(index, character)| {
+					range.start + index + character.len_utf8()
+				}));
+			}
+			_ => {}
+		}
+		if endOffsets.last() != Some(&range.end) {
+			endOffsets.push(range.end);
+		}
+
+		let mut chunkStart = range.start;
+		let mut unitStart = range.start;
+		for unitEnd in endOffsets {
+			if fitsFn(&text[chunkStart..unitEnd])? == false {
+				if chunkStart < unitStart {
+					output.push(chunkStart..unitStart);
+				}
+				if chunkStart == unitStart || fitsFn(&text[unitStart..unitEnd])? == false {
+					Self::_splitRange(text, unitStart..unitEnd, isLineBased, level + 1, fitsFn, output)?;
+					chunkStart = unitEnd;
+				} else {
+					chunkStart = unitStart;
+				}
+			}
+			unitStart = unitEnd;
+		}
+		if chunkStart < range.end {
+			output.push(chunkStart..range.end);
+		}
+		Ok(())
+	}
+}
+
 #[cfg(test)]
 mod tests {
+	/// Verifies the preferred split order with a deterministic character budget.
+	#[test]
+	#[allow(non_snake_case)]
+	fn retrievalSplitsAtPreferredBoundaries() -> Result<()> {
+		for (text, limit, isLineBased, expected) in [
+			("First.\n\nSecond.", 10, false, vec!["First.\n\n", "Second."]),
+			("First sentence. Second sentence.", 17, false, vec!["First sentence.", " Second sentence."]),
+			("one two three", 8, false, vec!["one two ", "three"]),
+			("ééééé", 2, false, vec!["éé", "éé", "é"]),
+			("one\ntwo\nthree", 8, true, vec!["one\ntwo\n", "three"]),
+		] {
+			let ranges = RetrievalSplitter::split(text, isLineBased, |piece| Ok(piece.chars().count() <= limit))?;
+			assert_eq!(ranges.into_iter().map(|range| &text[range]).collect::<Vec<_>>(), expected);
+		}
+		Ok(())
+	}
+
     use super::*;
     use tokenizers::models::wordlevel::WordLevel;
     use tokenizers::pre_tokenizers::whitespace::Whitespace;
