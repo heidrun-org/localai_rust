@@ -1,6 +1,6 @@
 # Test the Local AI skills
 
-From the repository root, run `sh scripts/prepare_testbed.sh` separately for Codex and Claude Code. The command copies the three distributable skill files and the test workspace instructions. Start the agent in the printed directory. Use an environment where the Local AI tools, cgx, and other copies of the skills are absent. Use an existing compatible Rust toolchain, platform compiler, linker, and CMake for the decision and text generation tools.
+From the repository root, run `sh scripts/prepare_testbed.sh` separately for Codex and Claude Code. The command copies the four distributable skill files and the test workspace instructions. Start the agent in the printed directory. Use an environment where the Local AI tools, cgx, and other copies of the skills are absent. Use an existing compatible Rust toolchain, platform compiler, linker, and CMake for the decision and text generation tools.
 
 Set these variables in the shell that starts the agent. cgx uses its regular layout inside the disposable cache and data roots. The skills keep Cargo downloads inside cgx's data directory.
 
@@ -22,13 +22,14 @@ Run the following requests in each agent.
 | Embeddings | Compute a local embedding for "The library opens at nine." and save it in embedding.json. | The JSON has a global vector of 384 values. |
 | Decisions | Use the local decision model. I was charged twice. Which team should help, billing, shipping, or technical? | The tool returns an option and its probability. |
 | Text generation | Use the local language model to summarize this in one sentence. The library opens at noon on Friday because staff have training in the morning. | The generated text mentions the Friday noon opening. |
+| Vector Store | Create a Local AI Vector Store called Test notes for the Hugging Face model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 with 384 values per embedding and an unknown revision. Show its description and identifier. | The store is created on disk and can be reopened by its identifier. No model is needed. |
 
-1. Make a request and check that the agent asks one question before setup. The question lists all required actions and storage locations, the missing model and size, and what approval or refusal means.
+1. Make a request and check that the agent asks one question before setup. The question lists all required actions and storage locations, any missing model and its size, and what approval or refusal means.
 2. Decline and verify that the runner, cgx cache and data directories, and model files remain absent.
 3. Make the request again and approve the listed steps. Check that cgx fetches the named package from GitHub, compiles it, and runs the request. Record the actual command output and executable path.
-4. Repeat the request and verify that the agent runs the cached executable with the cached model without a setup question.
+4. Repeat the request and verify that the agent runs the cached executable and any cached model without a setup question.
 
-Record the agent version and platform. For a first GitHub check, run the executable with `--help` to test the fetch and build alone. Use the request table to verify the later model runs.
+Record the agent version and platform. For a first GitHub check, run the executable with `--help` to test the fetch and build alone. Use the request table to verify the requested operations.
 
 ## Verified on Apple Silicon macOS
 

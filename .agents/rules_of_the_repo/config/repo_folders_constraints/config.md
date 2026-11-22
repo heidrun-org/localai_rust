@@ -7,6 +7,7 @@
 | `packages/localai_decisions` | Runs local model decisions over supplied choices | Manages Git worktrees | no other package | Rust and Cargo, with a C++ bridge to llama.cpp | Run the package tests after changes |
 | `packages/localai_embeddings` | Produces text embeddings locally | Manages Git worktrees | no other package | Rust and Cargo | Run the package tests after changes |
 | `packages/localai_llm` | Runs local language model requests | Manages Git worktrees | no other package | Rust and Cargo | Run the package tests after changes |
+| `packages/localai_vector_store` | Stores local embeddings and searches them by similarity | Runs embedding models or manages Git worktrees | no other package | Rust, Cargo, and SQLite | Run the package tests after changes |
 
 ## Other folders
 

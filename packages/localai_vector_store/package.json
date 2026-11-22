@@ -1,0 +1,11 @@
+{
+  "name": "localai_vector_store",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "cargo build --locked",
+    "cli": "cargo run --locked --release --quiet --",
+    "test": "cargo test --locked"
+  }
+}

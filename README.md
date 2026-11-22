@@ -1,16 +1,17 @@
 # localai_rust
 
-Rust libraries and command line tools that run AI models on the computer, with no cloud service.
+Rust libraries and command line tools for local AI models and embedding search.
 
-These packages come from the folder `packages/experiments` of [Heidrun Code](https://github.com/heidrun-org/heidrun_code). They moved to this repository in [issue 954](https://github.com/heidrun-org/heidrun_code/issues/954), with their Git history.
+The model packages come from the folder `packages/experiments` of [Heidrun Code](https://github.com/heidrun-org/heidrun_code). They moved to this repository in [issue 954](https://github.com/heidrun-org/heidrun_code/issues/954), with their Git history.
 
 ## Packages
 
 - [localai_embeddings](packages/localai_embeddings/README.md): computes text embeddings.
 - [localai_decisions](packages/localai_decisions/README.md): runs the decision models based on Qwen3.5 with llama.cpp.
 - [localai_llm](packages/localai_llm/README.md): runs a large language model that generates text, with llama.cpp.
+- [localai_vector_store](packages/localai_vector_store/README.md): stores and searches embeddings.
 
-The three Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.
+The Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder `target` at the root, so they share their compiled dependencies. No package depends on another package. Run Cargo in the folder of a package, as the scripts of each `package.json` do, and not at the root of the repository.
 
 The worktree commands use a pinned version of [Faster Rust Work Trees](https://github.com/jeromeetienne/faster_rust_worktrees). The repository settings are in [.faster_rust_worktrees.yaml](.faster_rust_worktrees.yaml).
 

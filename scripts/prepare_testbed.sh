@@ -14,7 +14,7 @@ workspace="$(mktemp -d "${TMPDIR:-/tmp}/localai-testbed.XXXXXX")"
 
 # Copy only the distributable skill files. This tests what an end user
 # installs and makes an accidental dependency on a companion file visible.
-for skill in localai_embeddings localai_decisions localai_llm; do
+for skill in localai_embeddings localai_decisions localai_llm localai_vector_store; do
     mkdir -p "$workspace/skills/$skill"
     cp "$repository/skills/$skill/SKILL.md" "$workspace/skills/$skill/"
 done
