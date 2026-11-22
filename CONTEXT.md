@@ -11,6 +11,9 @@ Rust libraries and command line tools that run AI models on the computer.
 - `Cargo.toml`: the Cargo workspace of the three Rust packages, with one `Cargo.lock` and one folder `target` at the root.
 - `.agents/skills/`: the skills of the coding agent plugin for Codex, copied from [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin).
 - `.claude/skills/`: the same skills for Claude Code.
+- `skills/`: distributable Local AI skills. See [CONTEXT.md](skills/CONTEXT.md).
+- `scripts/`: shared repository maintenance and test commands. See [CONTEXT.md](scripts/CONTEXT.md).
+- `testbed_folders/`: shared standalone test workspace for the three skills. See [CONTEXT.md](testbed_folders/CONTEXT.md).
 - `AGENTS.md`: the values of the Issue Fix Workflow of this repository.
 - Command to test all the packages: `pnpm test` (fast tests), `pnpm test:full` (all the tests)
 - Command to create a worktree: `pnpm worktree:create <branch>`

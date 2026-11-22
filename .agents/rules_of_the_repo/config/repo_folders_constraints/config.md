@@ -17,3 +17,6 @@
 | `.agents/` | Holds installed skills, repository rules, and temporary worktrees | Holds product source outside temporary worktrees | Markdown and skill resources | Use the configured worktree command and review changes to repository rules |
 | `.claude/skills/` | Exposes installed skills to Claude Code | Holds package implementation | Skill links | Update with the corresponding installed skills |
 | `docs/` | Holds project documentation when added | Holds package implementation | Markdown | Follow the docs folder system |
+| `skills/` | Holds distributable Local AI skills | Holds package implementation | Markdown and skill resources | Keep each skill self-contained and test it in both agents |
+| `testbed_folders/` | Holds the shared Codex and Claude Code test workspace | Holds downloaded models or compiled tools | Markdown and symbolic links | Generate the local skill copies from `skills/` |
+| `scripts/` | Holds shared repository maintenance and test scripts | Holds package implementation | Shell scripts | Document each command at its point of use |
