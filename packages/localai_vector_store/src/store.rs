@@ -1,7 +1,7 @@
 //! Persistent stores and cosine similarity search.
 
 use anyhow::{anyhow, ensure, Context, Result};
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use serde::{Serialize, Serializer};
 use std::fs::{self, File};
 use std::io::ErrorKind;
@@ -148,7 +148,24 @@ impl Store {
 	/// Opens the store with the given identifier in the parent directory, or returns an error.
 	pub fn open(parentDirectory: &Path, identifier: Uuid) -> Result<Self> {
 		let parentLock = Arc::new(Self::_lockParent(parentDirectory, false)?);
-		Self::_findStore(parentDirectory, identifier, &parentLock)
+		Self::_findStore(
+			parentDirectory,
+			identifier,
+			&parentLock,
+			OpenFlags::SQLITE_OPEN_READ_WRITE,
+		)
+	}
+
+	/// Opens identifier in parentDirectory for reads without modifying the store or its lock file.
+	pub fn openReadOnly(parentDirectory: &Path, identifier: Uuid) -> Result<Self> {
+		let parentLock = Arc::new(File::open(parentDirectory.join(".stores.lock"))?);
+		parentLock.lock_shared()?;
+		Self::_findStore(
+			parentDirectory,
+			identifier,
+			&parentLock,
+			OpenFlags::SQLITE_OPEN_READ_ONLY,
+		)
 	}
 
 	/// Returns descriptions for the stores in the parent directory, ordered by identifier.
@@ -168,7 +185,8 @@ impl Store {
 		};
 		let mut storeDescriptions = Vec::new();
 		for directory in Self::_storeDirectories(parentDirectory)? {
-			storeDescriptions.push(Self::_openDirectory(directory, &parentLock)?.describe()?);
+			storeDescriptions
+				.push(Self::_openDirectory(directory, &parentLock, OpenFlags::SQLITE_OPEN_READ_WRITE)?.describe()?);
 		}
 		storeDescriptions.sort_by_key(|storeDescription| storeDescription.identifier);
 		Ok(storeDescriptions)
@@ -178,7 +196,13 @@ impl Store {
 	/// Returns its description with the current path. All stores in the parent directory must be closed.
 	pub fn renameFolder(parentDirectory: &Path, identifier: Uuid) -> Result<StoreDescription> {
 		let parentLock = Arc::new(Self::_lockParent(parentDirectory, true)?);
-		let mut storeDescription = Self::_findStore(parentDirectory, identifier, &parentLock)?.describe()?;
+		let mut storeDescription = Self::_findStore(
+			parentDirectory,
+			identifier,
+			&parentLock,
+			OpenFlags::SQLITE_OPEN_READ_WRITE,
+		)?
+		.describe()?;
 		let folderPrefix = Self::_folderPrefix(&storeDescription.description);
 		let folderName = Self::_folderName(&folderPrefix, identifier);
 		let mut attempt = 1;
@@ -231,32 +255,86 @@ impl Store {
 	pub fn add(&mut self, embeddingModel: &EmbeddingModel, storedEmbeddings: &[StoredEmbedding]) -> Result<usize> {
 		self._checkModel(embeddingModel)?;
 		let transaction = self.connection.transaction()?;
-		{
-			let mut insertStatement =
-				transaction.prepare("INSERT INTO embeddings (identifier, source, vector) VALUES (?1, ?2, ?3)")?;
-			for storedEmbedding in storedEmbeddings {
-				ensure!(
-					storedEmbedding.identifier.trim().is_empty() == false,
-					"Embedding identifier is empty"
-				);
-				ensure!(
-					storedEmbedding.source.trim().is_empty() == false,
-					"Embedding source is empty"
-				);
-				Self::_vectorNorm(&storedEmbedding.vector, embeddingModel.dimensions)
-					.with_context(|| format!("Invalid embedding {}", storedEmbedding.identifier))?;
-				let bytes: Vec<u8> = storedEmbedding
-					.vector
-					.iter()
-					.flat_map(|value| value.to_le_bytes())
-					.collect();
-				insertStatement
-					.execute(params![storedEmbedding.identifier, storedEmbedding.source, bytes])
-					.with_context(|| format!("Could not insert embedding {}", storedEmbedding.identifier))?;
-			}
-		}
+		Self::_insertEmbeddings(&transaction, embeddingModel, storedEmbeddings)?;
 		transaction.commit()?;
 		Ok(storedEmbeddings.len())
+	}
+
+	/// Returns saved embedding identifiers and their source strings without loading vectors.
+	pub fn sources(&self) -> Result<Vec<(String, String)>> {
+		let mut statement = self
+			.connection
+			.prepare("SELECT identifier, source FROM embeddings ORDER BY identifier")?;
+		let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+		Ok(rows.collect::<rusqlite::Result<_>>()?)
+	}
+
+	/// Returns the time supplied by the last successful refresh, if any.
+	pub fn lastRefresh(&self) -> Result<Option<String>> {
+		let hasRefreshTable: bool = self.connection.query_row(
+			"SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE name = 'store_refresh' AND type = 'table')",
+			[],
+			|row| row.get(0),
+		)?;
+		if hasRefreshTable == false {
+			return Ok(None);
+		}
+		Ok(self
+			.connection
+			.query_row("SELECT refreshed_at FROM store_refresh", [], |row| row.get(0))
+			.optional()?)
+	}
+
+	/// Removes identifiers, inserts embeddings made by embeddingModel, and records refreshedAt together.
+	/// Returns an error and leaves the previous state intact if any change fails.
+	pub fn applyRefresh(
+		&mut self,
+		embeddingModel: &EmbeddingModel,
+		removedIdentifiers: &[String],
+		storedEmbeddings: &[StoredEmbedding],
+		refreshedAt: &str,
+	) -> Result<()> {
+		self._checkModel(embeddingModel)?;
+		let transaction = self.connection.transaction()?;
+		{
+			let mut deleteStatement = transaction.prepare("DELETE FROM embeddings WHERE identifier = ?1")?;
+			for identifier in removedIdentifiers {
+				deleteStatement.execute([identifier])?;
+			}
+		}
+		Self::_insertEmbeddings(&transaction, embeddingModel, storedEmbeddings)?;
+		Self::_recordRefresh(&transaction, refreshedAt)?;
+		transaction.commit()?;
+		Ok(())
+	}
+
+	/// Replaces all unpinned embeddings and records the new model revision and refresh time atomically.
+	/// The replacement must use the same model name and provider. Returns the number of old embeddings removed.
+	pub fn replaceUnpinnedEmbeddings(
+		&mut self,
+		embeddingModel: &EmbeddingModel,
+		storedEmbeddings: &[StoredEmbedding],
+		refreshedAt: &str,
+	) -> Result<usize> {
+		Self::_validateModel(embeddingModel)?;
+		ensure!(
+			self.embeddingModel.provider == embeddingModel.provider
+				&& self.embeddingModel.model == embeddingModel.model
+				&& embeddingModel.revision.is_some(),
+			"Replacement embeddings must identify a revision of the store's existing model"
+		);
+		let transaction = self.connection.transaction()?;
+		let updatedRows = transaction.execute(
+			"UPDATE store_metadata SET revision = ?1, dimensions = ?2 WHERE revision IS NULL",
+			params![embeddingModel.revision, i64::try_from(embeddingModel.dimensions)?],
+		)?;
+		ensure!(updatedRows == 1, "The vector store already has a model revision");
+		let removedCount = transaction.execute("DELETE FROM embeddings", [])?;
+		Self::_insertEmbeddings(&transaction, embeddingModel, storedEmbeddings)?;
+		Self::_recordRefresh(&transaction, refreshedAt)?;
+		transaction.commit()?;
+		self.embeddingModel = embeddingModel.clone();
+		Ok(removedCount)
 	}
 
 	/// Scores a query vector with the declared model and returns up to limit matches.
@@ -317,6 +395,49 @@ impl Store {
 	//	Helpers
 	///////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////
+
+	/// Records refreshedAt in the caller's transaction.
+	fn _recordRefresh(transaction: &Transaction<'_>, refreshedAt: &str) -> Result<()> {
+		transaction.execute_batch(
+			"CREATE TABLE IF NOT EXISTS store_refresh (
+				singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+				refreshed_at TEXT NOT NULL
+			) STRICT;",
+		)?;
+		transaction.execute("INSERT OR REPLACE INTO store_refresh VALUES (1, ?1)", [refreshedAt])?;
+		Ok(())
+	}
+
+	/// Inserts storedEmbeddings validated against embeddingModel into the caller's transaction.
+	fn _insertEmbeddings(
+		transaction: &Transaction<'_>,
+		embeddingModel: &EmbeddingModel,
+		storedEmbeddings: &[StoredEmbedding],
+	) -> Result<()> {
+		let mut insertStatement =
+			transaction.prepare("INSERT INTO embeddings (identifier, source, vector) VALUES (?1, ?2, ?3)")?;
+		for storedEmbedding in storedEmbeddings {
+			ensure!(
+				storedEmbedding.identifier.trim().is_empty() == false,
+				"Embedding identifier is empty"
+			);
+			ensure!(
+				storedEmbedding.source.trim().is_empty() == false,
+				"Embedding source is empty"
+			);
+			Self::_vectorNorm(&storedEmbedding.vector, embeddingModel.dimensions)
+				.with_context(|| format!("Invalid embedding {}", storedEmbedding.identifier))?;
+			let bytes: Vec<u8> = storedEmbedding
+				.vector
+				.iter()
+				.flat_map(|value| value.to_le_bytes())
+				.collect();
+			insertStatement
+				.execute(params![storedEmbedding.identifier, storedEmbedding.source, bytes])
+				.with_context(|| format!("Could not insert embedding {}", storedEmbedding.identifier))?;
+		}
+		Ok(())
+	}
 
 	/// Returns a shared lock for using stores or an exclusive lock for moving folders in parentDirectory.
 	fn _lockParent(parentDirectory: &Path, isExclusive: bool) -> Result<File> {
@@ -391,10 +512,10 @@ impl Store {
 	}
 
 	/// Opens the database whose metadata matches identifier under the held parentLock.
-	fn _findStore(parentDirectory: &Path, identifier: Uuid, parentLock: &Arc<File>) -> Result<Self> {
+	fn _findStore(parentDirectory: &Path, identifier: Uuid, parentLock: &Arc<File>, flags: OpenFlags) -> Result<Self> {
 		let legacyDirectory = parentDirectory.join(identifier.to_string());
 		if legacyDirectory.join(databaseName).is_file() == true {
-			let store = Self::_openDirectory(legacyDirectory, parentLock)?;
+			let store = Self::_openDirectory(legacyDirectory, parentLock, flags)?;
 			ensure!(
 				store.identifier == identifier,
 				"Store identifier does not match its legacy folder"
@@ -402,7 +523,7 @@ impl Store {
 			return Ok(store);
 		}
 		for directory in Self::_storeDirectories(parentDirectory)? {
-			if let Ok(store) = Self::_openDirectory(directory, parentLock) {
+			if let Ok(store) = Self::_openDirectory(directory, parentLock, flags) {
 				if store.identifier == identifier {
 					return Ok(store);
 				}
@@ -416,8 +537,8 @@ impl Store {
 	}
 
 	/// Opens the database in directory and reads its metadata while parentLock is held.
-	fn _openDirectory(directory: PathBuf, parentLock: &Arc<File>) -> Result<Self> {
-		let connection = Connection::open_with_flags(directory.join(databaseName), OpenFlags::SQLITE_OPEN_READ_WRITE)
+	fn _openDirectory(directory: PathBuf, parentLock: &Arc<File>, flags: OpenFlags) -> Result<Self> {
+		let connection = Connection::open_with_flags(directory.join(databaseName), flags)
 			.with_context(|| format!("Could not open store in {}", directory.display()))?;
 		let (savedIdentifier, description, savedSimilarityMeasure, embeddingModel) = connection
 			.query_row(
@@ -570,5 +691,94 @@ impl Store {
 			return Err(anyhow!("An embedding requires finite values and a nonzero norm"));
 		}
 		Ok(squaredNorm.sqrt())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// A failed insert after a deletion preserves both the old vectors and the old refresh time.
+	#[test]
+	fn refreshRollsBackWhenInsertFails() -> Result<()> {
+		let directory = tempfile::tempdir()?;
+		let embeddingModel = EmbeddingModel {
+			provider: String::from("example"),
+			model: String::from("example"),
+			revision: None,
+			dimensions: 2,
+		};
+		let mut store = Store::create(directory.path(), "Test", embeddingModel.clone())?;
+		let oldEmbedding = StoredEmbedding {
+			identifier: String::from("before"),
+			source: String::from("before"),
+			vector: vec![1.0, 0.0],
+		};
+		store.applyRefresh(&embeddingModel, &[], &[oldEmbedding], "first")?;
+		let invalidEmbedding = StoredEmbedding {
+			identifier: String::from("after"),
+			source: String::from("after"),
+			vector: vec![0.0, 0.0],
+		};
+		assert!(store
+			.applyRefresh(
+				&embeddingModel,
+				&[String::from("before")],
+				&[invalidEmbedding],
+				"second"
+			)
+			.is_err());
+		let readOnlyStore = Store::openReadOnly(directory.path(), store.describe()?.identifier)?;
+		assert_eq!(readOnlyStore.lastRefresh()?.as_deref(), Some("first"));
+		assert_eq!(
+			readOnlyStore.search(&embeddingModel, &[1.0, 0.0], 10)?[0].identifier,
+			"before"
+		);
+		Ok(())
+	}
+
+	/// Confirms that pinning an unversioned store replaces every vector and persists the revision.
+	#[test]
+	fn replacesUnpinnedEmbeddingsAtomically() -> Result<()> {
+		let directory = tempfile::tempdir()?;
+		let mut embeddingModel = EmbeddingModel {
+			provider: String::from("example"),
+			model: String::from("example"),
+			revision: None,
+			dimensions: 2,
+		};
+		let mut store = Store::create(directory.path(), "Test", embeddingModel.clone())?;
+		let oldEmbedding = StoredEmbedding {
+			identifier: String::from("before"),
+			source: String::from("before"),
+			vector: vec![1.0, 0.0],
+		};
+		store.applyRefresh(&embeddingModel, &[], &[oldEmbedding], "first")?;
+		embeddingModel.revision = Some(String::from("pinned"));
+		let mut replacement = StoredEmbedding {
+			identifier: String::from("after"),
+			source: String::from("after"),
+			vector: vec![0.0, 0.0],
+		};
+		assert!(store
+			.replaceUnpinnedEmbeddings(&embeddingModel, std::slice::from_ref(&replacement), "failed")
+			.is_err());
+		assert_eq!(store.lastRefresh()?.as_deref(), Some("first"));
+		assert_eq!(store.sources()?[0].0, "before");
+		assert_eq!(store.describe()?.embeddingModel.revision, None);
+
+		replacement.vector = vec![0.0, 1.0];
+		assert_eq!(
+			store.replaceUnpinnedEmbeddings(&embeddingModel, &[replacement], "second")?,
+			1
+		);
+		let reopened = Store::openReadOnly(directory.path(), store.describe()?.identifier)?;
+		assert_eq!(reopened.lastRefresh()?.as_deref(), Some("second"));
+		assert_eq!(reopened.describe()?.embeddingModel, embeddingModel);
+		assert_eq!(
+			reopened.sources()?,
+			vec![(String::from("after"), String::from("after"))]
+		);
+		Ok(())
 	}
 }

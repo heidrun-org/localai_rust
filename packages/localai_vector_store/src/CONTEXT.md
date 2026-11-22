@@ -5,6 +5,9 @@ Maintain SQLite vector stores and adapt command line requests to the storage lib
 
 ## Key Exports & Entry Points
 - `Store` creates, opens, renames, describes, and searches a local store. It also parses and formats store identifiers.
+- `Store::applyRefresh` atomically removes and adds embeddings and records refresh time.
+- `Store::replaceUnpinnedEmbeddings` atomically replaces an unpinned index and records the new model revision.
+- `Store::openReadOnly` opens a saved store without write access.
 - `localai_vector_store` reads embeddings from JSON input and returns JSON output.
 
 ## Rules

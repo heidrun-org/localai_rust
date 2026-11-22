@@ -1,0 +1,20 @@
+[package]
+name = "localai_rag"
+version = "0.1.0"
+description = "Searches named collections of local documents by meaning"
+license = "MIT"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4", features = ["derive", "env"] }
+dirs = "6"
+localai_embeddings = { path = "../localai_embeddings" }
+localai_vector_store = { path = "../localai_vector_store" }
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"

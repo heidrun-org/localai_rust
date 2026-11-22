@@ -127,8 +127,11 @@ pub struct ModelLoadTimings {
 }
 
 /// A loaded model ready to compute local embeddings.
+#[allow(non_snake_case)]
 pub struct EmbeddingEngine {
     model_id: String,
+    /// Immutable snapshot used to load the model files.
+    modelRevision: String,
     backend: Backend,
     model: BertModel,
     tokenizer: Tokenizer,
@@ -145,120 +148,23 @@ impl EmbeddingEngine {
 
     /// Loads a model and returns the time spent in each loading stage.
     pub fn load_with_timings(config: EmbeddingConfig) -> Result<(Self, ModelLoadTimings)> {
-        let mut timings = ModelLoadTimings::default();
-        let started = Instant::now();
-        let device = config.backend.device()?;
-        timings.device_initialization = started.elapsed();
-
-        let started = Instant::now();
-        let client =
-            HFClientSync::new().context("Could not initialize the Hugging Face model cache")?;
-        let repository = model_repository(&client, &config.model_id)?;
-        timings.repository_setup = started.elapsed();
-
-        let started = Instant::now();
-        let config_path = download(&repository, "config.json", config.check_model_updates)?;
-        timings.config_file_lookup = started.elapsed();
-
-        let started = Instant::now();
-        let tokenizer_path = download(&repository, "tokenizer.json", config.check_model_updates)?;
-        timings.tokenizer_file_lookup = started.elapsed();
-
-        let started = Instant::now();
-        let weights_path = download(&repository, "model.safetensors", config.check_model_updates)?;
-        timings.weights_file_lookup = started.elapsed();
-
-        let started = Instant::now();
-        // Sentence Transformers model repositories include this file, but it is
-        // not always copied into a local cache by tools that only download the
-        // model weights. Mean pooling is the supported fallback for BERT models.
-        let pooling_path = download(
-            &repository,
-            "1_Pooling/config.json",
-            config.check_model_updates,
-        )
-        .ok();
-        timings.pooling_file_lookup = started.elapsed();
-
-        let started = Instant::now();
-        let sentence_config_path = download(
-            &repository,
-            "sentence_bert_config.json",
-            config.check_model_updates,
-        )
-        .ok();
-        timings.sentence_config_file_lookup = started.elapsed();
-
-        let started = Instant::now();
-        let model_config_json: Value = serde_json::from_slice(
-            &std::fs::read(&config_path).context("Could not read the model configuration")?,
-        )?;
-        validate_bert_architecture(&model_config_json)?;
-        if let Some(pooling_path) = pooling_path {
-            validate_mean_pooling(&pooling_path)?;
-        }
-        let model_config: BertConfig = serde_json::from_value(model_config_json)
-            .context("The model has a BERT configuration that Candle cannot read")?;
-        let preferred_limit = if let Some(path) = sentence_config_path {
-            let settings: Value = serde_json::from_slice(&std::fs::read(path)?)?;
-            settings
-                .get("max_seq_length")
-                .and_then(Value::as_u64)
-                .map(usize::try_from)
-                .transpose()?
-        } else if config.model_id == DEFAULT_MODEL_ID {
-            Some(128)
-        } else {
-            None
-        };
-        let max_tokens = preferred_limit
-            .unwrap_or(model_config.max_position_embeddings)
-            .min(model_config.max_position_embeddings);
-        if max_tokens < 3 {
-            bail!("The model token limit must leave room for text and special tokens")
-        }
-        timings.config_parsing = started.elapsed();
-
-        let started = Instant::now();
-        let mut tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(anyhow::Error::msg)
-            .context("Could not read the model tokenizer")?;
-        tokenizer
-            .with_truncation(None)
-            .map_err(anyhow::Error::msg)
-            .context("Could not configure the model tokenizer")?;
-        tokenizer.with_padding(Some(PaddingParams {
-            strategy: PaddingStrategy::BatchLongest,
-            ..Default::default()
-        }));
-        timings.tokenizer_setup = started.elapsed();
-
-        // Safety: the cached safetensors file is treated as immutable while Candle reads its memory map.
-        let started = Instant::now();
-        let variables = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
-                .context("Could not load model weights")?
-        };
-        timings.weights_mapping = started.elapsed();
-
-        let started = Instant::now();
-        let model = BertModel::load(variables, &model_config)
-            .context("Could not load the BERT model weights into Candle")?;
-        timings.model_setup = started.elapsed();
-
-        Ok((
-            Self {
-                model_id: config.model_id,
-                backend: config.backend,
-                model,
-                tokenizer,
-                device,
-                max_tokens,
-                dimensions: model_config.hidden_size,
-            },
-            timings,
-        ))
+        Self::_loadWithTimings(config, "main")
     }
+
+	/// Loads the model from the immutable snapshot identified by revision, with settings from config.
+	#[allow(non_snake_case)]
+	pub fn loadAtRevision(config: EmbeddingConfig, revision: &str) -> Result<Self> {
+		if revision.len() != 40 || revision.bytes().all(|byte| byte.is_ascii_hexdigit()) == false {
+			bail!("An embedding model revision must be a full Hugging Face commit identifier");
+		}
+		Self::_loadWithTimings(config, revision).map(|(embeddingEngine, _)| embeddingEngine)
+	}
+
+	/// Returns the immutable Hugging Face revision used by this engine.
+	#[allow(non_snake_case)]
+	pub fn modelRevision(&self) -> &str {
+		&self.modelRevision
+	}
 
     /// The configured model identifier.
     pub fn model_id(&self) -> &str {
@@ -377,6 +283,26 @@ impl EmbeddingEngine {
         })
     }
 
+	/// Counts the tokens in text, including special tokens, without truncating.
+	#[allow(non_snake_case)]
+	pub fn countTokens(&self, text: &str) -> Result<usize> {
+		Ok(self.tokenizer.encode(text, true).map_err(anyhow::Error::msg)?.len())
+	}
+
+	/// Returns byte ranges in text that fit the model with prefix prepended.
+	/// With isLineBased, prefer source lines. Otherwise prefer paragraphs, sentences, words, then characters.
+	#[allow(non_snake_case)]
+	pub fn splitRetrievalText(
+		&self,
+		text: &str,
+		prefix: &str,
+		isLineBased: bool,
+	) -> Result<Vec<std::ops::Range<usize>>> {
+		chunking::RetrievalSplitter::split(text, isLineBased, |piece| {
+			Ok(self.countTokens(&format!("{prefix}{piece}"))? <= self.max_tokens)
+		})
+	}
+
     /// Returns the dimension of this model's sentence embeddings.
     pub fn dimensions(&self) -> usize {
         self.dimensions
@@ -386,6 +312,141 @@ impl EmbeddingEngine {
     pub fn max_tokens(&self) -> usize {
         self.max_tokens
     }
+	/// Resolves requestedRevision once and loads all model files from the resulting snapshot.
+	#[allow(non_snake_case)]
+	fn _loadWithTimings(config: EmbeddingConfig, requestedRevision: &str) -> Result<(Self, ModelLoadTimings)> {
+        let mut timings = ModelLoadTimings::default();
+        let started = Instant::now();
+        let device = config.backend.device()?;
+        timings.device_initialization = started.elapsed();
+
+        let started = Instant::now();
+        let client =
+            HFClientSync::new().context("Could not initialize the Hugging Face model cache")?;
+        let repository = model_repository(&client, &config.model_id)?;
+        timings.repository_setup = started.elapsed();
+
+        let started = Instant::now();
+		let config_path = download(&repository, "config.json", requestedRevision, config.check_model_updates)?;
+		let modelRevision = Self::_snapshotRevision(&config_path)?.to_owned();
+        timings.config_file_lookup = started.elapsed();
+
+        let started = Instant::now();
+        let tokenizer_path = download(&repository, "tokenizer.json", &modelRevision, false)?;
+        timings.tokenizer_file_lookup = started.elapsed();
+
+        let started = Instant::now();
+        let weights_path = download(&repository, "model.safetensors", &modelRevision, false)?;
+        timings.weights_file_lookup = started.elapsed();
+
+        let started = Instant::now();
+        // Sentence Transformers model repositories include this file, but it is
+        // not always copied into a local cache by tools that only download the
+        // model weights. Mean pooling is the supported fallback for BERT models.
+        let pooling_path = download(
+            &repository,
+            "1_Pooling/config.json",
+            &modelRevision,
+            false,
+        )
+        .ok();
+        timings.pooling_file_lookup = started.elapsed();
+
+        let started = Instant::now();
+        let sentence_config_path = download(
+            &repository,
+            "sentence_bert_config.json",
+            &modelRevision,
+            false,
+        )
+        .ok();
+        timings.sentence_config_file_lookup = started.elapsed();
+
+        let started = Instant::now();
+        let model_config_json: Value = serde_json::from_slice(
+            &std::fs::read(&config_path).context("Could not read the model configuration")?,
+        )?;
+        validate_bert_architecture(&model_config_json)?;
+        if let Some(pooling_path) = pooling_path {
+            validate_mean_pooling(&pooling_path)?;
+        }
+        let model_config: BertConfig = serde_json::from_value(model_config_json)
+            .context("The model has a BERT configuration that Candle cannot read")?;
+        let preferred_limit = if let Some(path) = sentence_config_path {
+            let settings: Value = serde_json::from_slice(&std::fs::read(path)?)?;
+            settings
+                .get("max_seq_length")
+                .and_then(Value::as_u64)
+                .map(usize::try_from)
+                .transpose()?
+        } else if config.model_id == DEFAULT_MODEL_ID {
+            Some(128)
+        } else {
+            None
+        };
+        let max_tokens = preferred_limit
+            .unwrap_or(model_config.max_position_embeddings)
+            .min(model_config.max_position_embeddings);
+        if max_tokens < 3 {
+            bail!("The model token limit must leave room for text and special tokens")
+        }
+        timings.config_parsing = started.elapsed();
+
+        let started = Instant::now();
+        let mut tokenizer = Tokenizer::from_file(&tokenizer_path)
+            .map_err(anyhow::Error::msg)
+            .context("Could not read the model tokenizer")?;
+        tokenizer
+            .with_truncation(None)
+            .map_err(anyhow::Error::msg)
+            .context("Could not configure the model tokenizer")?;
+        tokenizer.with_padding(Some(PaddingParams {
+            strategy: PaddingStrategy::BatchLongest,
+            ..Default::default()
+        }));
+        timings.tokenizer_setup = started.elapsed();
+
+        // Safety: the cached safetensors file is treated as immutable while Candle reads its memory map.
+        let started = Instant::now();
+        let variables = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+                .context("Could not load model weights")?
+        };
+        timings.weights_mapping = started.elapsed();
+
+        let started = Instant::now();
+        let model = BertModel::load(variables, &model_config)
+            .context("Could not load the BERT model weights into Candle")?;
+        timings.model_setup = started.elapsed();
+
+        Ok((
+            Self {
+                model_id: config.model_id,
+                modelRevision,
+                backend: config.backend,
+                model,
+                tokenizer,
+                device,
+                max_tokens,
+                dimensions: model_config.hidden_size,
+            },
+            timings,
+        ))
+    }
+
+	/// Returns the commit segment of configPath, as provided by the Hugging Face snapshot cache.
+	#[allow(non_snake_case)]
+	fn _snapshotRevision(configPath: &std::path::Path) -> Result<&str> {
+		let snapshot = configPath.parent().context("Model configuration has no snapshot directory")?;
+		let revision = snapshot.file_name().and_then(std::ffi::OsStr::to_str)
+			.filter(|revision| revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
+			.context("Could not determine the embedding model snapshot revision")?;
+		if snapshot.parent().and_then(std::path::Path::file_name) != Some(std::ffi::OsStr::new("snapshots")) {
+			bail!("Model configuration is outside the Hugging Face snapshot cache");
+		}
+		Ok(revision)
+	}
+
 }
 
 /// Computes cosine similarity between two vectors.
@@ -418,13 +479,14 @@ fn model_repository(
 fn download(
     repository: &HFRepositorySync<RepoTypeModel>,
     filename: &str,
+    revision: &str,
     check_model_updates: bool,
 ) -> Result<PathBuf> {
     if !check_model_updates {
         match repository
             .download_file()
             .filename(filename.to_string())
-            .revision("main".to_string())
+            .revision(revision.to_owned())
             .local_files_only(true)
             .send()
         {
@@ -442,7 +504,7 @@ fn download(
     repository
         .download_file()
         .filename(filename.to_string())
-        .revision("main".to_string())
+        .revision(revision.to_owned())
         .send()
         .with_context(|| format!("Could not download `{filename}` from the selected model"))
 }
