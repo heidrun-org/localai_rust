@@ -1,19 +1,20 @@
 # Directory Context: `/`
 
 ## Purpose
-Rust libraries and command line tools that run AI models on the computer.
+Rust libraries and command line tools that run AI models and search saved embeddings on the computer.
 
 ## Key Exports & Entry Points
 - `packages/localai_embeddings/`: text embeddings — see its own CONTEXT.md.
 - `packages/localai_decisions/`: the decision models based on Qwen3.5 with llama.cpp — see its own CONTEXT.md.
 - `packages/localai_llm/`: a large language model that generates text with llama.cpp — see its own CONTEXT.md.
-- `.faster_rust_worktrees.yaml`: configures the shared Faster Rust Work Trees tool for the three Cargo packages. See the worktree commands in README.md.
-- `Cargo.toml`: the Cargo workspace of the three Rust packages, with one `Cargo.lock` and one folder `target` at the root.
+- `packages/localai_vector_store/`: local embedding storage and search. See its CONTEXT.md.
+- `.faster_rust_worktrees.yaml`: configures the shared Faster Rust Work Trees tool for the Cargo workspace. See the worktree commands in README.md.
+- `Cargo.toml`: the Cargo workspace of the Rust packages, with one `Cargo.lock` and one folder `target` at the root.
 - `.agents/skills/`: the skills of the coding agent plugin for Codex, copied from [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin).
 - `.claude/skills/`: the same skills for Claude Code.
 - `skills/`: distributable Local AI skills. See [CONTEXT.md](skills/CONTEXT.md).
 - `scripts/`: shared repository maintenance and test commands. See [CONTEXT.md](scripts/CONTEXT.md).
-- `testbed_folders/`: shared standalone test workspace for the three skills. See [CONTEXT.md](testbed_folders/CONTEXT.md).
+- `testbed_folders/`: shared standalone test workspace for the Local AI skills. See [CONTEXT.md](testbed_folders/CONTEXT.md).
 - `AGENTS.md`: the values of the Issue Fix Workflow of this repository.
 - Command to test all the packages: `pnpm test` (fast tests), `pnpm test:full` (all the tests)
 - Command to create a worktree: `pnpm worktree:create <branch>`

@@ -9,7 +9,9 @@ Use this tool to turn text into numeric vectors for similarity search, grouping,
 
 ## When to use this tool
 
-Use embeddings when the task needs a numeric representation of text. For one similarity comparison, use `--compare` and report the score. For a search across many documents, compute and save the document vectors once, then embed each new query with the same model and compare it against those vectors. Use the same model and compatible chunking settings across the collection so the results are comparable.
+Use embeddings when the task needs a numeric representation of text. For one similarity comparison, use `--compare` and report the score. For a search across many documents, use the `localai_vector_store` skill to save the document vectors once, reopen the store, and search with new query embeddings from the same model. Use the same model and compatible chunking settings across the collection so the results are comparable.
+
+Save the embedding output with `--output FILE` for use with Local AI Vector Store. The output provides the model identifier, number of values, and source names. Declare the model provider and supply the revision when known.
 
 Use the full document vector to rank documents. Use the chunk vectors and offsets to locate the matching passage in a long document. To embed many files, pass repeated `--file` options and keep the returned `source` and `input_index` with each result.
 

@@ -45,3 +45,15 @@ cargoCommands:
       - test
       - --release
       - --no-run
+  - cwd: packages/localai_vector_store
+    argv:
+      - cargo
+      - build
+      - --locked
+      - --release
+  - cwd: packages/localai_vector_store
+    argv:
+      - cargo
+      - test
+      - --locked
+      - --no-run

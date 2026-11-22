@@ -1,0 +1,287 @@
+//! Tests the installed command with its public input and output formats.
+
+#![allow(non_snake_case)]
+
+use anyhow::{ensure, Context, Result};
+use serde_json::{json, Value};
+use std::fs;
+use std::path::Path;
+use std::process::{Command, Output};
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//	CommandLine — run the vector store command
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+/// Runs the compiled command against a temporary parent folder.
+struct CommandLine;
+
+impl CommandLine {
+	/// Runs arguments with the selected parent directory and returns the process output.
+	fn run(parentDirectory: &Path, arguments: &[&str]) -> Result<Output> {
+		Ok(Command::new(env!("CARGO_BIN_EXE_localai_vector_store"))
+			.arg("--parent-dir")
+			.arg(parentDirectory)
+			.args(arguments)
+			.output()?)
+	}
+
+	/// Returns the successful command output as JSON, or reports the command error.
+	fn json(output: Output) -> Result<Value> {
+		ensure!(
+			output.status.success() == true,
+			"{}",
+			String::from_utf8_lossy(&output.stderr)
+		);
+		Ok(serde_json::from_slice(&output.stdout)?)
+	}
+
+	/// Creates a store for the test model in parentDirectory and returns its identifier.
+	fn create(parentDirectory: &Path) -> Result<String> {
+		let result = Self::json(Self::run(
+			parentDirectory,
+			&[
+				"create",
+				"--description",
+				"Test documents",
+				"--model-provider",
+				"test-provider",
+				"--model",
+				"test/model",
+				"--dimensions",
+				"2",
+			],
+		)?)?;
+		Ok(result["identifier"]
+			.as_str()
+			.context("Missing store identifier")?
+			.to_owned())
+	}
+
+	/// Writes a file with model and documents in the embedding command's format.
+	fn writeEmbeddings(path: &Path, model: &str, documents: Value) -> Result<()> {
+		let output = json!({
+			"model": model, "backend": "cpu", "dimensions": 2, "documents": documents
+		});
+		Ok(fs::write(path, serde_json::to_vec(&output)?)?)
+	}
+
+	/// Returns a document with source, vector, and one perpendicular chunk.
+	fn document(source: &str, vector: [f32; 2]) -> Value {
+		json!({
+			"source": source, "input_index": 0, "global_vector": vector,
+			"chunks": [{"index": 0, "start_byte": 0, "end_byte": 1, "vector": [-vector[1], vector[0]]}]
+		})
+	}
+}
+
+#[test]
+fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let parentDirectory = temporaryDirectory.path().join("stores");
+	let identifier = CommandLine::create(&parentDirectory)?;
+	let secondIdentifier = CommandLine::create(&parentDirectory)?;
+	assert_ne!(identifier, secondIdentifier);
+	assert!(parentDirectory.join(&identifier).join("store.sqlite3").is_file());
+
+	let documentsPath = temporaryDirectory.path().join("documents.json");
+	let queryPath = temporaryDirectory.path().join("query.json");
+	CommandLine::writeEmbeddings(
+		&documentsPath,
+		"test/model",
+		json!([
+			CommandLine::document("library.txt", [1.0, 0.0]),
+			CommandLine::document("garden.txt", [-1.0, 0.0])
+		]),
+	)?;
+	CommandLine::writeEmbeddings(
+		&queryPath,
+		"test/model",
+		json!([CommandLine::document("text:1", [2.0, 0.0])]),
+	)?;
+	let documentsPathStr = documentsPath.to_str().context("Invalid document path")?;
+	let queryPathStr = queryPath.to_str().context("Invalid query path")?;
+
+	let added = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&[
+			"add",
+			"--store",
+			&identifier,
+			"--input",
+			documentsPathStr,
+			"--model-provider",
+			"test-provider",
+			"--vectors",
+			"both",
+		],
+	)?)?;
+	assert_eq!(added["inserted"], 4);
+
+	let listed = CommandLine::json(CommandLine::run(&parentDirectory, &["list"])?)?;
+	assert_eq!(listed.as_array().context("Expected a list of stores")?.len(), 2);
+	let described = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&["describe", "--store", &identifier],
+	)?)?;
+	assert_eq!(described["description"], "Test documents");
+	assert_eq!(
+		described["embedding_model"],
+		json!({
+			"provider": "test-provider", "model": "test/model", "revision": null, "dimensions": 2
+		})
+	);
+	assert_eq!(described["embedding_count"], 4);
+	assert_eq!(described["similarity_measure"], "cosine");
+
+	let matches = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&[
+			"search",
+			"--store",
+			&identifier,
+			"--query",
+			queryPathStr,
+			"--model-provider",
+			"test-provider",
+			"--limit",
+			"2",
+		],
+	)?)?;
+	assert_eq!(matches.as_array().context("Expected a list of matches")?.len(), 2);
+	assert_eq!(
+		matches[0],
+		json!({
+			"identifier": "[\"library.txt\",null]", "source": "library.txt", "score": 1.0
+		})
+	);
+	assert_eq!(
+		matches[1],
+		json!({
+			"identifier": "[\"garden.txt\",0]", "source": "garden.txt", "score": 0.0
+		})
+	);
+
+	let unknownIdentifier = uuid::Uuid::new_v4().to_string();
+	let missing = CommandLine::run(&parentDirectory, &["describe", "--store", &unknownIdentifier])?;
+	assert_eq!(missing.status.success(), false);
+	assert_eq!(parentDirectory.join(unknownIdentifier).exists(), false);
+	Ok(())
+}
+
+#[test]
+fn rejectedImportsLeaveSavedEmbeddingsUntouched() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let parentDirectory = temporaryDirectory.path().join("stores");
+	let identifier = CommandLine::create(&parentDirectory)?;
+	let filePath = temporaryDirectory.path().join("input.json");
+	let filePathStr = filePath.to_str().context("Invalid input path")?;
+	let addArguments = [
+		"add",
+		"--store",
+		&identifier,
+		"--input",
+		filePathStr,
+		"--model-provider",
+		"test-provider",
+	];
+	let searchArguments = [
+		"search",
+		"--store",
+		&identifier,
+		"--query",
+		filePathStr,
+		"--model-provider",
+		"test-provider",
+	];
+	CommandLine::writeEmbeddings(
+		&filePath,
+		"test/model",
+		json!([CommandLine::document("original", [1.0, 0.0])]),
+	)?;
+	CommandLine::json(CommandLine::run(&parentDirectory, &addArguments)?)?;
+
+	for (model, vector, revision) in [
+		("another/model", json!([1.0, 0.0]), &[][..]),
+		("test/model", json!([1.0]), &[][..]),
+		(
+			"test/model",
+			json!([1.0, 0.0]),
+			&["--model-revision", "revision-one"][..],
+		),
+	] {
+		CommandLine::writeEmbeddings(
+			&filePath,
+			model,
+			json!([
+				{"source": "new", "global_vector": vector, "chunks": []}
+			]),
+		)?;
+		for operation in [addArguments, searchArguments] {
+			let arguments = [operation.as_slice(), revision].concat();
+			assert_eq!(CommandLine::run(&parentDirectory, &arguments)?.status.success(), false);
+		}
+	}
+
+	CommandLine::writeEmbeddings(
+		&filePath,
+		"test/model",
+		json!([
+			CommandLine::document("new", [-1.0, 0.0]),
+			CommandLine::document("original", [-1.0, 0.0]),
+		]),
+	)?;
+	assert_eq!(
+		CommandLine::run(&parentDirectory, &addArguments)?.status.success(),
+		false
+	);
+
+	CommandLine::writeEmbeddings(
+		&filePath,
+		"test/model",
+		json!([CommandLine::document("query", [1.0, 0.0])]),
+	)?;
+	let matches = CommandLine::json(CommandLine::run(&parentDirectory, &searchArguments)?)?;
+	assert_eq!(
+		matches,
+		json!([{"identifier": "[\"original\",null]", "source": "original", "score": 1.0}])
+	);
+	Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn createsStoreInDefaultApplicationDataDirectory() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let applicationData = temporaryDirectory.path().join("application-data");
+	let mut command = Command::new(env!("CARGO_BIN_EXE_localai_vector_store"));
+	command
+		.env("HOME", temporaryDirectory.path())
+		.env("XDG_DATA_HOME", &applicationData)
+		.args([
+			"create",
+			"--description",
+			"Default store",
+			"--model-provider",
+			"test-provider",
+			"--model",
+			"test/model",
+			"--dimensions",
+			"2",
+		]);
+	let store = CommandLine::json(command.output()?)?;
+	let identifier = store["identifier"].as_str().context("Missing store identifier")?;
+	#[cfg(target_os = "macos")]
+	let applicationData = temporaryDirectory.path().join("Library/Application Support");
+	let expectedDirectory = applicationData
+		.join("heidrun-localai-rust")
+		.join("vector-stores")
+		.join(identifier);
+	assert_eq!(
+		store["directory"].as_str().map(Path::new),
+		Some(expectedDirectory.as_path())
+	);
+	assert!(expectedDirectory.join("store.sqlite3").is_file());
+	Ok(())
+}
