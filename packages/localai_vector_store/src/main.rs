@@ -52,19 +52,19 @@ enum Command {
 	/// Show the metadata and embedding count for one store.
 	Describe {
 		/// The generated store identifier.
-		#[arg(long)]
+		#[arg(long, value_parser = Store::parseIdentifier)]
 		store: Uuid,
 	},
 	/// Give an existing store a readable folder name.
 	RenameFolder {
 		/// The generated store identifier.
-		#[arg(long)]
+		#[arg(long, value_parser = Store::parseIdentifier)]
 		store: Uuid,
 	},
 	/// Save embeddings from a localai_embeddings output file.
 	Add {
 		/// The generated store identifier.
-		#[arg(long)]
+		#[arg(long, value_parser = Store::parseIdentifier)]
 		store: Uuid,
 		/// JSON file produced by localai_embeddings.
 		#[arg(long)]
@@ -82,7 +82,7 @@ enum Command {
 	/// Rank saved embeddings against the document vector in a query file.
 	Search {
 		/// The generated store identifier.
-		#[arg(long)]
+		#[arg(long, value_parser = Store::parseIdentifier)]
 		store: Uuid,
 		/// localai_embeddings JSON file with one document.
 		#[arg(long)]
@@ -160,7 +160,7 @@ struct ChunkOutput {
 #[derive(Serialize)]
 struct AddResult {
 	/// Identifier of the store that received the embeddings.
-	store: Uuid,
+	store: String,
 	/// Number of embeddings added.
 	inserted: usize,
 }
@@ -263,7 +263,10 @@ impl Command {
 				let embeddingModel = embeddingOutput.embeddingModel(modelIdentity);
 				let storedEmbeddings = embeddingOutput.intoStoredEmbeddings(vectors, sourcePrefix.as_deref())?;
 				let inserted = Store::open(parentDirectory, store)?.add(&embeddingModel, &storedEmbeddings)?;
-				Self::_writeJson(&AddResult { store, inserted })
+				Self::_writeJson(&AddResult {
+					store: Store::formatIdentifier(store),
+					inserted,
+				})
 			}
 			Self::Search {
 				store,

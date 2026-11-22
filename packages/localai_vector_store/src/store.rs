@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, ensure, Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::fs::{self, File};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -46,6 +46,7 @@ pub struct StoredEmbedding {
 #[derive(Debug, Serialize)]
 pub struct StoreDescription {
 	/// Generated identifier of the store.
+	#[serde(serialize_with = "Store::_serializeIdentifier")]
 	pub identifier: Uuid,
 	/// Folder containing the database.
 	pub directory: PathBuf,
@@ -94,6 +95,16 @@ impl Store {
 	pub fn defaultParentDirectory() -> Result<PathBuf> {
 		let dataDirectory = dirs::data_local_dir().context("Could not locate the user's application data directory")?;
 		Ok(dataDirectory.join("heidrun-localai-rust").join("vector-stores"))
+	}
+
+	/// Reads a store identifier written with underscores or in the original UUID format.
+	pub fn parseIdentifier(identifierStr: &str) -> Result<Uuid, uuid::Error> {
+		Uuid::parse_str(&identifierStr.replace('_', "-"))
+	}
+
+	/// Writes the full store identifier with underscores.
+	pub fn formatIdentifier(identifier: Uuid) -> String {
+		identifier.to_string().replace('-', "_")
 	}
 
 	/// Creates a store in the parent directory with the supplied description and model configuration.
@@ -175,7 +186,7 @@ impl Store {
 			let directory = if attempt == 1 {
 				parentDirectory.join(&folderName)
 			} else {
-				parentDirectory.join(format!("{folderName}-{attempt}"))
+				parentDirectory.join(format!("{folderName}_{attempt}"))
 			};
 			if directory == storeDescription.directory {
 				return Ok(storeDescription);
@@ -330,7 +341,15 @@ impl Store {
 		Ok(parentLock)
 	}
 
-	/// Converts description to a bounded folder prefix using lowercase letters, digits, and hyphens.
+	/// Writes identifier with underscores through the supplied serializer.
+	fn _serializeIdentifier<Output: Serializer>(
+		identifier: &Uuid,
+		serializer: Output,
+	) -> Result<Output::Ok, Output::Error> {
+		serializer.serialize_str(&Self::formatIdentifier(*identifier))
+	}
+
+	/// Converts description to a bounded folder prefix using lowercase letters, digits, and underscores.
 	fn _folderPrefix(description: &str) -> String {
 		let mut folderPrefix = String::new();
 		for word in description.split(|character: char| character.is_ascii_alphanumeric() == false) {
@@ -338,7 +357,7 @@ impl Store {
 				continue;
 			}
 			if folderPrefix.is_empty() == false {
-				folderPrefix.push('-');
+				folderPrefix.push('_');
 			}
 			let remainingLength = 64 - folderPrefix.len();
 			folderPrefix.push_str(&word[..word.len().min(remainingLength)].to_ascii_lowercase());
@@ -349,12 +368,12 @@ impl Store {
 		if folderPrefix.is_empty() == true {
 			return "store".to_owned();
 		}
-		folderPrefix.trim_end_matches('-').to_owned()
+		folderPrefix.trim_end_matches('_').to_owned()
 	}
 
 	/// Returns a readable folder name from folderPrefix and the first eight digits of identifier.
 	fn _folderName(folderPrefix: &str, identifier: Uuid) -> String {
-		format!("{folderPrefix}--{}", &identifier.to_string()[..8])
+		format!("{folderPrefix}__{}", &identifier.to_string()[..8])
 	}
 
 	/// Returns the direct child folders of parentDirectory that contain a published database.
@@ -390,7 +409,8 @@ impl Store {
 			}
 		}
 		Err(anyhow!(
-			"Could not find store {identifier} in {}",
+			"Could not find store {} in {}",
+			Self::formatIdentifier(identifier),
 			parentDirectory.display()
 		))
 	}
@@ -418,7 +438,7 @@ impl Store {
 				},
 			)
 			.with_context(|| format!("Could not read metadata in {}", directory.display()))?;
-		let identifier = Uuid::parse_str(&savedIdentifier)?;
+		let identifier = Self::parseIdentifier(&savedIdentifier)?;
 		ensure!(
 			savedSimilarityMeasure == similarityMeasure,
 			"Unsupported similarity measure: {savedSimilarityMeasure}"
@@ -466,7 +486,7 @@ impl Store {
 		transaction.execute(
 			"INSERT INTO store_metadata VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
 			params![
-				identifier.to_string(),
+				Self::formatIdentifier(identifier),
 				description,
 				embeddingModel.provider,
 				embeddingModel.model,
