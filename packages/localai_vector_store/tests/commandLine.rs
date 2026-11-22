@@ -39,12 +39,21 @@ impl CommandLine {
 
 	/// Creates a store for the test model in parentDirectory and returns its identifier.
 	fn create(parentDirectory: &Path) -> Result<String> {
-		let result = Self::json(Self::run(
+		let result = Self::createWithDescription(parentDirectory, "Test documents")?;
+		Ok(result["identifier"]
+			.as_str()
+			.context("Missing store identifier")?
+			.to_owned())
+	}
+
+	/// Creates a store with description in parentDirectory and returns the command output.
+	fn createWithDescription(parentDirectory: &Path, description: &str) -> Result<Value> {
+		Self::json(Self::run(
 			parentDirectory,
 			&[
 				"create",
 				"--description",
-				"Test documents",
+				description,
 				"--model-provider",
 				"test-provider",
 				"--model",
@@ -52,11 +61,7 @@ impl CommandLine {
 				"--dimensions",
 				"2",
 			],
-		)?)?;
-		Ok(result["identifier"]
-			.as_str()
-			.context("Missing store identifier")?
-			.to_owned())
+		)?)
 	}
 
 	/// Writes a file with model and documents in the embedding command's format.
@@ -83,7 +88,10 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 	let identifier = CommandLine::create(&parentDirectory)?;
 	let secondIdentifier = CommandLine::create(&parentDirectory)?;
 	assert_ne!(identifier, secondIdentifier);
-	assert!(parentDirectory.join(&identifier).join("store.sqlite3").is_file());
+	let readableDirectory = parentDirectory.join(format!("test-documents--{}", &identifier[..8]));
+	assert!(readableDirectory.join("store.sqlite3").is_file());
+	let legacyDirectory = parentDirectory.join(&identifier);
+	fs::rename(&readableDirectory, &legacyDirectory)?;
 
 	let documentsPath = temporaryDirectory.path().join("documents.json");
 	let queryPath = temporaryDirectory.path().join("query.json");
@@ -162,6 +170,67 @@ fn storesPersistAndSearchAcrossInvocations() -> Result<()> {
 			"identifier": "[\"garden.txt\",0]", "source": "garden.txt", "score": 0.0
 		})
 	);
+
+	fs::create_dir(&readableDirectory)?;
+	fs::write(readableDirectory.join("keep.txt"), "existing folder")?;
+	let renamedDirectory = parentDirectory.join(format!("test-documents--{}-2", &identifier[..8]));
+	let renamed = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&["rename-folder", "--store", &identifier],
+	)?)?;
+	assert_eq!(
+		renamed["directory"].as_str().map(Path::new),
+		Some(renamedDirectory.as_path())
+	);
+	assert_eq!(legacyDirectory.exists(), false);
+	assert_eq!(
+		fs::read_to_string(readableDirectory.join("keep.txt"))?,
+		"existing folder"
+	);
+	assert_eq!(renamed["identifier"], identifier);
+	assert_eq!(renamed["description"], "Test documents");
+	assert_eq!(renamed["embedding_count"], 4);
+	assert_eq!(
+		CommandLine::json(CommandLine::run(
+			&parentDirectory,
+			&["rename-folder", "--store", &identifier],
+		)?)?,
+		renamed
+	);
+	let matchesAfterRename = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&[
+			"search",
+			"--store",
+			&identifier,
+			"--query",
+			queryPathStr,
+			"--model-provider",
+			"test-provider",
+			"--limit",
+			"2",
+		],
+	)?)?;
+	assert_eq!(matchesAfterRename, matches);
+
+	let listed = CommandLine::json(CommandLine::run(&parentDirectory, &["list"])?)?;
+	assert!(listed
+		.as_array()
+		.context("Expected a list of stores")?
+		.contains(&renamed));
+	let addedAfterRename = CommandLine::json(CommandLine::run(
+		&parentDirectory,
+		&[
+			"add",
+			"--store",
+			&identifier,
+			"--input",
+			queryPathStr,
+			"--model-provider",
+			"test-provider",
+		],
+	)?)?;
+	assert_eq!(addedAfterRename["inserted"], 1);
 
 	let unknownIdentifier = uuid::Uuid::new_v4().to_string();
 	let missing = CommandLine::run(&parentDirectory, &["describe", "--store", &unknownIdentifier])?;
@@ -277,11 +346,58 @@ fn createsStoreInDefaultApplicationDataDirectory() -> Result<()> {
 	let expectedDirectory = applicationData
 		.join("heidrun-localai-rust")
 		.join("vector-stores")
-		.join(identifier);
+		.join(format!("default-store--{}", &identifier[..8]));
 	assert_eq!(
 		store["directory"].as_str().map(Path::new),
 		Some(expectedDirectory.as_path())
 	);
 	assert!(expectedDirectory.join("store.sqlite3").is_file());
+	Ok(())
+}
+
+#[test]
+fn concurrentCreatesWithFallbackNamesKeepBothStores() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let parentDirectory = temporaryDirectory.path();
+	let (first, second) = std::thread::scope(|scope| {
+		let first = scope.spawn(|| CommandLine::createWithDescription(parentDirectory, "../?!"));
+		let second = CommandLine::createWithDescription(parentDirectory, "../?!");
+		(first.join().expect("Creation thread panicked"), second)
+	});
+	let first = first?;
+	let second = second?;
+	assert_ne!(first["identifier"], second["identifier"]);
+	for store in [&first, &second] {
+		let identifier = store["identifier"].as_str().context("Missing store identifier")?;
+		let expectedDirectory = parentDirectory.join(format!("store--{}", &identifier[..8]));
+		assert_eq!(
+			store["directory"].as_str().map(Path::new),
+			Some(expectedDirectory.as_path())
+		);
+	}
+	let listed = CommandLine::json(CommandLine::run(parentDirectory, &["list"])?)?;
+	assert_eq!(listed.as_array().context("Expected a list of stores")?.len(), 2);
+	Ok(())
+}
+
+#[test]
+fn renameWaitsForOpenStoreToClose() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let parentDirectory = temporaryDirectory.path();
+	let identifier = CommandLine::create(parentDirectory)?;
+	let readableDirectory = parentDirectory.join(format!("test-documents--{}", &identifier[..8]));
+	let legacyDirectory = parentDirectory.join(&identifier);
+	fs::rename(&readableDirectory, &legacyDirectory)?;
+
+	let store = localai_vector_store::Store::open(parentDirectory, uuid::Uuid::parse_str(&identifier)?)?;
+	let renameArguments = ["rename-folder", "--store", &identifier];
+	let rejected = CommandLine::run(parentDirectory, &renameArguments)?;
+	assert_eq!(rejected.status.success(), false);
+	assert!(String::from_utf8_lossy(&rejected.stderr).contains("Close stores and retry"));
+	assert!(legacyDirectory.join("store.sqlite3").is_file());
+
+	drop(store);
+	CommandLine::json(CommandLine::run(parentDirectory, &renameArguments)?)?;
+	assert!(readableDirectory.join("store.sqlite3").is_file());
 	Ok(())
 }

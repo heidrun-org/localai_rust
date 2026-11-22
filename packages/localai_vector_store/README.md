@@ -36,15 +36,18 @@ The search command reopens the store and returns `library.txt` as the closest so
 
 ## Command line options
 
-All commands accept `--parent-dir PATH`. Without it, the parent directory is `heidrun-localai-rust/vector-stores` under the operating system's per-user application data folder. Each store has a generated identifier and a `store.sqlite3` database in the folder named after the identifier. Commands print JSON.
+All commands accept `--parent-dir PATH`. Without it, the parent directory is `heidrun-localai-rust/vector-stores` under the operating system's per-user application data folder. Each store has a generated identifier and a `store.sqlite3` database in a folder named from its description and a short suffix, such as `french-greetings--7c4b9a21`. Use the full identifier from the command output with `--store`. Commands print JSON.
 
 | Command | Options |
 | --- | --- |
 | `create` | `--description TEXT --model-provider PROVIDER --model MODEL --dimensions N [--model-revision REVISION]` |
 | `list` | Lists stores in the selected parent directory. |
 | `describe` | `--store ID` |
+| `rename-folder` | `--store ID` |
 | `add` | `--store ID --input FILE --model-provider PROVIDER [--model-revision REVISION] [--vectors document\|chunk\|both] [--source-prefix PREFIX]` |
 | `search` | `--store ID --query FILE --model-provider PROVIDER [--model-revision REVISION] [--limit N]` |
+
+Existing stores in folders named after their full identifiers continue to work. Run `localai_vector_store rename-folder --store "$store_id"` to give an existing store a readable folder name. Close any open stores in the same parent directory before running the command. The command returns the new path and preserves the identifier, description, and embeddings.
 
 `add` saves document vectors by default. Use `--vectors chunk` for individual chunks or `--vectors both` for both kinds. Identifiers use the source name and the chunk position, if any. Use `--source-prefix` to distinguish identical source names from separate projects or separate text inputs. If any identifier is already present, the whole import fails and saved embeddings are preserved.
 
@@ -52,7 +55,7 @@ All commands accept `--parent-dir PATH`. Without it, the parent directory is `he
 
 ## Rust library
 
-Use `Store::create`, `Store::open`, `Store::add`, and `Store::search` with an `EmbeddingModel`. Callers supply their own embedding identifiers and source references when using the library. Multiple embeddings can refer to the same source.
+Use `Store::create`, `Store::open`, `Store::add`, and `Store::search` with an `EmbeddingModel`. Callers supply their own embedding identifiers and source references when using the library. Multiple embeddings can refer to the same source. Use `Store::renameFolder` to give an existing store a readable folder name.
 
 ## Tests
 

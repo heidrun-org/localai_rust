@@ -55,6 +55,12 @@ enum Command {
 		#[arg(long)]
 		store: Uuid,
 	},
+	/// Give an existing store a readable folder name.
+	RenameFolder {
+		/// The generated store identifier.
+		#[arg(long)]
+		store: Uuid,
+	},
 	/// Save embeddings from a localai_embeddings output file.
 	Add {
 		/// The generated store identifier.
@@ -245,6 +251,7 @@ impl Command {
 			}
 			Self::List => Self::_writeJson(&Store::list(parentDirectory)?),
 			Self::Describe { store } => Self::_writeJson(&Store::open(parentDirectory, store)?.describe()?),
+			Self::RenameFolder { store } => Self::_writeJson(&Store::renameFolder(parentDirectory, store)?),
 			Self::Add {
 				store,
 				input,

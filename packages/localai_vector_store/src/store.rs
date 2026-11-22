@@ -3,9 +3,10 @@
 use anyhow::{anyhow, ensure, Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
 use serde::Serialize;
-use std::fs;
+use std::fs::{self, File};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use uuid::Uuid;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -84,6 +85,8 @@ pub struct Store {
 	description: String,
 	/// Model and vector length used in the store.
 	embeddingModel: EmbeddingModel,
+	/// Keeps the parent directory locked against moves while the connection is open.
+	_parentLock: Arc<File>,
 }
 
 impl Store {
@@ -104,9 +107,11 @@ impl Store {
 		fs::create_dir_all(parentDirectory)
 			.with_context(|| format!("Could not create parent directory {}", parentDirectory.display()))?;
 
+		let parentLock = Arc::new(Self::_lockParent(parentDirectory, false)?);
+		let folderPrefix = Self::_folderPrefix(description);
 		let (identifier, directory) = loop {
 			let identifier = Uuid::new_v4();
-			let directory = parentDirectory.join(identifier.to_string());
+			let directory = parentDirectory.join(Self::_folderName(&folderPrefix, identifier));
 			match fs::create_dir(&directory) {
 				Ok(()) => break (identifier, directory),
 				Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
@@ -114,7 +119,13 @@ impl Store {
 			}
 		};
 
-		let store = Self::_initialize(&directory, identifier, description, &embeddingModel);
+		let store = Self::_initialize(
+			&directory,
+			identifier,
+			description,
+			&embeddingModel,
+			Arc::clone(&parentLock),
+		);
 		if store.is_err() == true {
 			if let Err(cleanupError) = fs::remove_dir_all(&directory) {
 				return store.with_context(|| format!("Could not remove {}: {cleanupError}", directory.display()));
@@ -125,73 +136,68 @@ impl Store {
 
 	/// Opens the store with the given identifier in the parent directory, or returns an error.
 	pub fn open(parentDirectory: &Path, identifier: Uuid) -> Result<Self> {
-		let directory = parentDirectory.join(identifier.to_string());
-		let connection =
-			Connection::open_with_flags(directory.join(databaseName), OpenFlags::SQLITE_OPEN_READ_WRITE)
-				.with_context(|| format!("Could not open store {identifier} in {}", parentDirectory.display()))?;
-		let (savedIdentifier, description, savedSimilarityMeasure, embeddingModel) = connection
-			.query_row(
-				"SELECT identifier, description, provider, model, revision, dimensions, similarity_measure FROM store_metadata",
-				[],
-				|row| {
-					Ok((
-						row.get::<_, String>(0)?,
-						row.get(1)?,
-						row.get::<_, String>(6)?,
-						EmbeddingModel {
-							provider: row.get(2)?,
-							model: row.get(3)?,
-							revision: row.get(4)?,
-							dimensions: row.get::<_, u32>(5)? as usize,
-						},
-					))
-				},
-			)
-			.with_context(|| format!("Could not read metadata for store {identifier}"))?;
-		ensure!(
-			savedIdentifier == identifier.to_string(),
-			"Store identifier does not match its folder"
-		);
-		ensure!(
-			savedSimilarityMeasure == similarityMeasure,
-			"Unsupported similarity measure: {savedSimilarityMeasure}"
-		);
-		Self::_validateModel(&embeddingModel)?;
-
-		Ok(Self {
-			connection,
-			identifier,
-			directory,
-			description,
-			embeddingModel,
-		})
+		let parentLock = Arc::new(Self::_lockParent(parentDirectory, false)?);
+		Self::_findStore(parentDirectory, identifier, &parentLock)
 	}
 
 	/// Returns descriptions for the stores in the parent directory, ordered by identifier.
 	/// A missing parent directory returns an empty list.
 	pub fn list(parentDirectory: &Path) -> Result<Vec<StoreDescription>> {
-		let entries = match fs::read_dir(parentDirectory) {
-			Ok(entries) => entries,
-			Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-			Err(error) => return Err(error).with_context(|| format!("Could not list {}", parentDirectory.display())),
+		let parentLock = match Self::_lockParent(parentDirectory, false) {
+			Ok(parentLock) => Arc::new(parentLock),
+			Err(error)
+				if error
+					.downcast_ref::<std::io::Error>()
+					.is_some_and(|error| error.kind() == ErrorKind::NotFound)
+					== true =>
+			{
+				return Ok(Vec::new())
+			}
+			Err(error) => return Err(error),
 		};
 		let mut storeDescriptions = Vec::new();
-		for entry in entries {
-			let entry = entry?;
-			if entry.file_type()?.is_dir() == false {
-				continue;
-			}
-			let Ok(identifier) = Uuid::parse_str(&entry.file_name().to_string_lossy()) else {
-				continue;
-			};
-			if entry.file_name() == identifier.to_string().as_str()
-				&& entry.path().join(databaseName).try_exists()? == true
-			{
-				storeDescriptions.push(Self::open(parentDirectory, identifier)?.describe()?);
-			}
+		for directory in Self::_storeDirectories(parentDirectory)? {
+			storeDescriptions.push(Self::_openDirectory(directory, &parentLock)?.describe()?);
 		}
 		storeDescriptions.sort_by_key(|storeDescription| storeDescription.identifier);
 		Ok(storeDescriptions)
+	}
+
+	/// Gives the store identified by identifier a readable folder in parentDirectory.
+	/// Returns its description with the current path. All stores in the parent directory must be closed.
+	pub fn renameFolder(parentDirectory: &Path, identifier: Uuid) -> Result<StoreDescription> {
+		let parentLock = Arc::new(Self::_lockParent(parentDirectory, true)?);
+		let mut storeDescription = Self::_findStore(parentDirectory, identifier, &parentLock)?.describe()?;
+		let folderPrefix = Self::_folderPrefix(&storeDescription.description);
+		let folderName = Self::_folderName(&folderPrefix, identifier);
+		let mut attempt = 1;
+		loop {
+			let directory = if attempt == 1 {
+				parentDirectory.join(&folderName)
+			} else {
+				parentDirectory.join(format!("{folderName}-{attempt}"))
+			};
+			if directory == storeDescription.directory {
+				return Ok(storeDescription);
+			}
+			match fs::symlink_metadata(&directory) {
+				Ok(_) => {
+					attempt += 1;
+					continue;
+				}
+				Err(error) if error.kind() == ErrorKind::NotFound => (),
+				Err(error) => return Err(error).with_context(|| format!("Could not inspect {}", directory.display())),
+			}
+			fs::rename(&storeDescription.directory, &directory).with_context(|| {
+				format!(
+					"Could not rename {} to {}",
+					storeDescription.directory.display(),
+					directory.display()
+				)
+			})?;
+			storeDescription.directory = directory;
+			return Ok(storeDescription);
+		}
 	}
 
 	/// Returns the store's saved metadata and the current number of embeddings.
@@ -301,6 +307,133 @@ impl Store {
 	///////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////
 
+	/// Returns a shared lock for using stores or an exclusive lock for moving folders in parentDirectory.
+	fn _lockParent(parentDirectory: &Path, isExclusive: bool) -> Result<File> {
+		let lockPath = parentDirectory.join(".stores.lock");
+		let parentLock = File::options()
+			.read(true)
+			.write(true)
+			.create(true)
+			.truncate(false)
+			.open(&lockPath)
+			.with_context(|| format!("Could not open {}", lockPath.display()))?;
+		if isExclusive == true {
+			parentLock.try_lock().with_context(|| {
+				format!(
+					"Could not lock {} for renaming. Close stores and retry",
+					parentDirectory.display()
+				)
+			})?;
+		} else {
+			parentLock.lock_shared()?;
+		}
+		Ok(parentLock)
+	}
+
+	/// Converts description to a bounded folder prefix using lowercase letters, digits, and hyphens.
+	fn _folderPrefix(description: &str) -> String {
+		let mut folderPrefix = String::new();
+		for word in description.split(|character: char| character.is_ascii_alphanumeric() == false) {
+			if word.is_empty() == true {
+				continue;
+			}
+			if folderPrefix.is_empty() == false {
+				folderPrefix.push('-');
+			}
+			let remainingLength = 64 - folderPrefix.len();
+			folderPrefix.push_str(&word[..word.len().min(remainingLength)].to_ascii_lowercase());
+			if folderPrefix.len() >= 64 {
+				break;
+			}
+		}
+		if folderPrefix.is_empty() == true {
+			return "store".to_owned();
+		}
+		folderPrefix.trim_end_matches('-').to_owned()
+	}
+
+	/// Returns a readable folder name from folderPrefix and the first eight digits of identifier.
+	fn _folderName(folderPrefix: &str, identifier: Uuid) -> String {
+		format!("{folderPrefix}--{}", &identifier.to_string()[..8])
+	}
+
+	/// Returns the direct child folders of parentDirectory that contain a published database.
+	fn _storeDirectories(parentDirectory: &Path) -> Result<Vec<PathBuf>> {
+		let entries =
+			fs::read_dir(parentDirectory).with_context(|| format!("Could not list {}", parentDirectory.display()))?;
+		let mut directories = Vec::new();
+		for entry in entries {
+			let entry = entry?;
+			if entry.file_type()?.is_dir() == true && entry.path().join(databaseName).is_file() == true {
+				directories.push(entry.path());
+			}
+		}
+		Ok(directories)
+	}
+
+	/// Opens the database whose metadata matches identifier under the held parentLock.
+	fn _findStore(parentDirectory: &Path, identifier: Uuid, parentLock: &Arc<File>) -> Result<Self> {
+		let legacyDirectory = parentDirectory.join(identifier.to_string());
+		if legacyDirectory.join(databaseName).is_file() == true {
+			let store = Self::_openDirectory(legacyDirectory, parentLock)?;
+			ensure!(
+				store.identifier == identifier,
+				"Store identifier does not match its legacy folder"
+			);
+			return Ok(store);
+		}
+		for directory in Self::_storeDirectories(parentDirectory)? {
+			if let Ok(store) = Self::_openDirectory(directory, parentLock) {
+				if store.identifier == identifier {
+					return Ok(store);
+				}
+			}
+		}
+		Err(anyhow!(
+			"Could not find store {identifier} in {}",
+			parentDirectory.display()
+		))
+	}
+
+	/// Opens the database in directory and reads its metadata while parentLock is held.
+	fn _openDirectory(directory: PathBuf, parentLock: &Arc<File>) -> Result<Self> {
+		let connection = Connection::open_with_flags(directory.join(databaseName), OpenFlags::SQLITE_OPEN_READ_WRITE)
+			.with_context(|| format!("Could not open store in {}", directory.display()))?;
+		let (savedIdentifier, description, savedSimilarityMeasure, embeddingModel) = connection
+			.query_row(
+				"SELECT identifier, description, provider, model, revision, dimensions, similarity_measure FROM store_metadata",
+				[],
+				|row| {
+					Ok((
+						row.get::<_, String>(0)?,
+						row.get(1)?,
+						row.get::<_, String>(6)?,
+						EmbeddingModel {
+							provider: row.get(2)?,
+							model: row.get(3)?,
+							revision: row.get(4)?,
+							dimensions: row.get::<_, u32>(5)? as usize,
+						},
+					))
+				},
+			)
+			.with_context(|| format!("Could not read metadata in {}", directory.display()))?;
+		let identifier = Uuid::parse_str(&savedIdentifier)?;
+		ensure!(
+			savedSimilarityMeasure == similarityMeasure,
+			"Unsupported similarity measure: {savedSimilarityMeasure}"
+		);
+		Self::_validateModel(&embeddingModel)?;
+		Ok(Self {
+			connection,
+			identifier,
+			directory,
+			description,
+			embeddingModel,
+			_parentLock: Arc::clone(parentLock),
+		})
+	}
+
 	/// Initializes the database in directory with the identifier, description, and model.
 	/// Returns the open store after its schema and metadata have been committed.
 	fn _initialize(
@@ -308,6 +441,7 @@ impl Store {
 		identifier: Uuid,
 		description: &str,
 		embeddingModel: &EmbeddingModel,
+		parentLock: Arc<File>,
 	) -> Result<Self> {
 		let temporaryDatabase = directory.join("store.sqlite3.initializing");
 		let mut connection = Connection::open(&temporaryDatabase)?;
@@ -352,6 +486,7 @@ impl Store {
 			directory: directory.to_path_buf(),
 			description: description.to_owned(),
 			embeddingModel: embeddingModel.clone(),
+			_parentLock: parentLock,
 		})
 	}
 
