@@ -15,7 +15,7 @@ Use the short form for one text and one question. Use a JSON request when the in
 
 ## Run from the user's project
 
-Use the executable on PATH or the absolute path printed by the setup commands. A first inference may download missing model files after approval. Reuse the installed executable and model on later requests. Return the executable's actual output, or explain the blocker if no output is available.
+Use the executable on PATH or the absolute path returned by cgx. A first inference may download missing model files after approval. Reuse the installed executable and model on later requests. Return the executable's actual output, or explain the blocker if no output is available.
 
 ### Inputs and output
 
@@ -56,94 +56,62 @@ Report the selected answer and its probability, along with any other probabiliti
 - `--verbose` writes model logs and timings to standard error. `-h` or `--help` lists the installed options. `-V` or `--version` prints the version.
 - The `benchmark` command times built-in short and long cases after warm-up. Use `--decisions N` to set the number of decisions per case and `--json` for machine-readable results. Run `localai_decisions benchmark --help` for the benchmark options.
 
-### Find the executable and model
+## Choose a model by download size
 
-Look for `localai_decisions` on PATH and at `<setup directory>/bin/localai_decisions`. The setup directory is `LOCALAI_SETUP_DIR` when set, otherwise `${XDG_DATA_HOME:-$HOME/.local/share}/heidrun-localai-rust`. If the executable and model are ready, run the executable directly.
+Decision models use the GGUF model file format. The code after the colon selects a particular weight variant. The sizes below are for the file on disk. Leave additional memory for the running model and its input.
 
-The default model is `ggml-org/Kev-0.8B-GGUF` (about 0.81 GB). Resolve the cache as `HF_HUB_CACHE`, then `HUGGINGFACE_HUB_CACHE`, then the `hub` directory under `HF_HOME` or under the Hugging Face cache in `XDG_CACHE_HOME` (default `~/.cache`). In the repository's `models--owner--name` cache directory, read `refs/main` and check that the following files resolve under `snapshots/<revision>/`: Kev-0.8B-Q8_0.gguf. A user-supplied local `.gguf` file can be used with `--model` after checking it exists. For a different model check its exact repository and files. Treat an uncertain or incomplete cache as a possible download.
+| Model for `--model` | Download | When to choose it |
+| --- | ---: | --- |
+| [`ggml-org/Kev-0.8B-GGUF:Q8_0`](https://huggingface.co/ggml-org/Kev-0.8B-GGUF/blob/main/Kev-0.8B-Q8_0.gguf) | 0.81 GB | Default and smallest choice. Start here for yes-or-no checks and routing. |
+| [`ggml-org/Kev-4B-GGUF:Q4_K_M`](https://huggingface.co/ggml-org/Kev-4B-GGUF/blob/main/Kev-4B-Q4_K_M.gguf) | 3.03 GB | Larger Kev model to compare against the default when the labels are difficult to tell apart. |
+| [`ggml-org/Bespoke-Nimble-9B-v3-GGUF:Q4_K_M`](https://huggingface.co/ggml-org/Bespoke-Nimble-9B-v3-GGUF/blob/main/Bespoke-Nimble-9B-v3-Q4_K_M.gguf) | 6.32 GB | An alternative decision model for a comparison on examples with known answers. |
+| [`ggml-org/Clef-Flash-GGUF:Q8_0`](https://huggingface.co/ggml-org/Clef-Flash-GGUF/blob/main/Clef-Flash-Q8_0.gguf) | 9.66 GB | A larger choice for testing text decisions if the machine has room for the model. |
+| [`ggml-org/OpenJev-GGUF:Q4_K_M`](https://huggingface.co/ggml-org/OpenJev-GGUF/blob/main/OpenJev-Q4_K_M.gguf) | 19.40 GB | The largest choice in this list. Evaluate it on a machine with enough free memory and disk space. |
 
-Use filesystem reads for these checks. Even a partial cache can trigger a download. Leave model update checks off unless the user requests and approves them.
+The repository has run Kev-0.8B. The other choices use decision types supported by the tool. Compare them on a small set of examples before relying on their probabilities. Use only the text model file for Clef Flash and OpenJev.
 
-## Ask before setup
+## Check what is already available
 
-If a build is needed, check for Git, a native compiler and linker, and CMake. Look for mise on PATH and at `<setup directory>/bin/mise`. If mise is missing, check for curl on macOS or Linux. If the managed Rust toolchain is missing, include the Rust download. For a missing prerequisite, identify the installation command or explain what the human needs to do if the environment prevents setup.
+Use read-only filesystem checks before setup. Look for `localai_decisions` on PATH or read the saved executable path at `<cgx data>/localai/localai_decisions.path`. Verify that the saved path points to an executable named `localai_decisions` under `<cgx data>/bins/`. If the saved path is absent, reuse a cached executable when you can verify it came from the selected Heidrun GitHub repository. If the executable and all model files are ready, run the executable directly from the user's project.
 
-Ask the human for explicit approval before installing a prerequisite, fetching source, building, or downloading a model. List only the needed steps, the setup directory, and the model name and size when known. Explain mise when it needs installation:
+On macOS and Linux, the cgx cache is `${XDG_CACHE_HOME:-$HOME/.cache}/cgx` and `<cgx data>` is `${XDG_DATA_HOME:-$HOME/.local/share}/cgx`. cgx keeps downloaded source in its cache and build files and executables under `build/` and `bins/` in its data directory.
 
-> Mise can download and run the tools a command needs without adding them to your usual shell setup. It keeps the downloads for reuse.
+Use `HF_HUB_CACHE` for the Hugging Face hub cache when set, then `HUGGINGFACE_HUB_CACHE`. Otherwise use the `hub/` directory under `HF_HOME` or under `${XDG_CACHE_HOME:-$HOME/.cache}/huggingface`. Each repository has a folder named `models--owner--name`.
 
-Ask “May I proceed with these steps?” and wait. On refusal, leave setup untouched. Ask again if an additional setup step turns out to be necessary.
+The default is `ggml-org/Kev-0.8B-GGUF:Q8_0`. In the cache directory for the selected model, read `refs/main` and verify that the file resolves in `snapshots/<revision>/`. The default file is `Kev-0.8B-Q8_0.gguf`. For another model use the repository name without `-GGUF`, followed by `-<variant>.gguf`. A user-supplied `.gguf` path can be used after checking that the file exists.
 
-## Install the executable with mise
+Treat incomplete or uncertain model caches as a possible download. Include any requested model update in the approval question because the update can download files. Do not use a cgx command for preflight if it could fetch or build the tool, even when the command would only print the executable path.
 
-When the executable is missing, run the following in a fresh POSIX shell after approval. The commands reuse mise if available or install the official release on macOS and Linux. Rust and Cargo use a dedicated setup directory. Mise fetches and builds only this package from GitHub.
+## Ask once before setup
+
+If the tool needs a build, check for `cgx` on PATH or at `<cgx data>/runner/cgx`. Check for Git, a native compiler and linker, CMake, and a compatible Rust compiler and Cargo. With Rustup, use `rustup toolchain list` and `rustup run TOOLCHAIN rustc --version` to check an existing toolchain without updating it. If cgx is missing, check for curl, tar, and a checksum tool. Identify any other missing prerequisite and how it would be obtained before asking.
+
+Ask **one** question and wait for explicit approval. List every required setup action, including downloads of cgx or prerequisites, the GitHub source fetch, Cargo dependency downloads, the build, and any model download. Give the relevant directories and the model name and download size when known. Explain both choices in the same question.
+
+- **Approve** — Complete the listed setup and run the requested operation. One approval covers all listed steps.
+- **Decline** — Leave setup untouched and explain which missing item prevents the requested operation.
+
+If an unexpected requirement falls outside the approved steps, report the blocker and stop. Keep the user's existing default Rust toolchain intact.
+
+## Set up and run with cgx
+
+After approval, reuse cgx if available. Otherwise, select the published [cgx 0.2.0 archive](https://github.com/anelson/cgx/releases/tag/v0.2.0) for the operating system and processor. For example, Apple Silicon macOS uses `cgx-aarch64-apple-darwin.tar.xz`. Download the archive and its checksum into a temporary directory, verify the archive against the published checksum, and extract `cgx` to `<cgx data>/runner/cgx`. Invoke the runner by its absolute path. This keeps the bootstrap in the default cgx data directory. Remove the temporary archive after extraction.
+
+Use an existing compatible Rust toolchain when available. If Rust is absent or incompatible and the user approved a separate installation, use the official [Rustup standalone installer](https://rust-lang.github.io/rustup/installation/index.html) with `--no-modify-path --profile minimal --default-toolchain 1.100.0`, `RUSTUP_HOME` under `<cgx data>/rustup`, and `CARGO_HOME` under `<cgx data>/cargo`. For the build subprocess, set the isolated `RUSTUP_HOME` and prepend the isolated Cargo `bin/` directory to its PATH. For a prerequisite without an approved installation method, report the blocker.
+
+On macOS and Linux the commands below use cgx's default directories. Set `cgx` to the available executable path and `toolchain` to the installed Rustup toolchain name. For an existing Cargo installation without Rustup, omit the `+` argument and point `CARGO` at that Cargo executable. Cargo downloads go under `<cgx data>/cargo` for the skill's build. Use the same isolated `RUSTUP_HOME` on later builds if a separate Rust installation was needed. Set `GGML_METAL=OFF` for the processor build because cgx invokes Cargo from the workspace root.
 
 ```sh
-# Stop on errors or unset variables so setup cannot continue after a failed step.
-set -eu
-package=localai_decisions
-# Keep downloads and builds in a dedicated directory. An absolute path still
-# points to the same place after the script changes its working directory.
-setup_dir="${LOCALAI_SETUP_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/heidrun-localai-rust}"
-case "$setup_dir" in
-    /*) ;;
-    *) echo 'LOCALAI_SETUP_DIR must be an absolute path.' >&2; exit 2 ;;
-esac
-
-# If the managed executable already exists, report its path and skip setup.
-if [ -x "$setup_dir/bin/$package" ]; then
-    printf '%s\n' "$setup_dir/bin/$package"
-    exit
-fi
-
-# Reuse mise from PATH or from this setup directory before downloading it.
-mkdir -p "$setup_dir/$package" "$setup_dir/bin"
-if command -v mise >/dev/null 2>&1; then
-    mise_bin="$(command -v mise)"
-else
-    mise_bin="$setup_dir/bin/mise"
-    if [ ! -x "$mise_bin" ]; then
-        case "$(uname -s)" in
-            Darwin|Linux) ;;
-            *) echo 'Install mise for this platform and put it on PATH. See https://mise.jdx.dev/installing-mise.html' >&2; exit 1 ;;
-        esac
-        # Download the official installer to a temporary file and remove that
-        # file when the shell exits. Install mise without shell activation.
-        installer="$(mktemp "$setup_dir/mise-installer.XXXXXX")"
-        trap 'rm -f "$installer"' EXIT
-        curl -fsSL https://mise.run -o "$installer"
-        MISE_INSTALL_PATH="$mise_bin" MISE_VERSION=v2026.11.12 MISE_INSTALL_HELP=0 sh "$installer"
-    fi
-fi
-
-# Run mise from the package setup directory. Keep mise data, Cargo files,
-# and Rust toolchains separate from the user's normal configuration.
-cd "$setup_dir/$package"
-export MISE_DATA_DIR="$setup_dir/mise-data"
-export MISE_CACHE_DIR="$setup_dir/mise-cache"
-export MISE_CONFIG_DIR="$setup_dir/mise-config"
-export MISE_STATE_DIR="$setup_dir/mise-state"
-export CARGO_HOME="$setup_dir/cargo"
-export CARGO_TARGET_DIR="$setup_dir/target"
-export RUSTUP_HOME="$setup_dir/rustup"
-export MISE_RUST_CARGO_HOME="$CARGO_HOME"
-# Trust the setup directory for this run so mise can read the file below.
-export MISE_TRUSTED_CONFIG_PATHS="$PWD"
-# Pin the Rust version and the Git revision. The crate name selects just
-# the requested executable from the repository.
-cat > mise.toml <<EOF
-[tool_alias]
-$package = "cargo:https://github.com/heidrun-org/localai_rust"
-
-[tools]
-rust = "1.100.0"
-$package = { version = "rev:a77075be2e6d981ea5eb6588d2695728b4da59dd", crate = "$package" }
-EOF
-# Let mise fetch the source and build the executable with Cargo.
-"$mise_bin" install --jobs 1
-# Give later requests a stable executable path that works from any project.
-executable="$("$mise_bin" where "$package")/bin/$package"
-test -x "$executable"
-ln -sfn "$executable" "$setup_dir/bin/$package"
-printf '%s\n' "$setup_dir/bin/$package"
+cgx_data="${XDG_DATA_HOME:-$HOME/.local/share}/cgx"
+tool_path=$(CARGO_HOME="$cgx_data/cargo" GGML_METAL=OFF "$cgx" "+$toolchain" \
+    --git https://github.com/heidrun-org/localai_rust.git --branch main \
+    --prebuilt-binary never --no-exec localai_decisions) || exit 1
+test -x "$tool_path" || exit 1
+mkdir -p "$cgx_data/localai"
+printf '%s\n' "$tool_path" > "$cgx_data/localai/localai_decisions.path"
+printf '%s\n' "$tool_path"
 ```
+
+Run the printed executable from the user's project with the arguments for the request. Model downloads use the Hugging Face cache described above. For a later request, use the saved executable and cached model after checking both. Return actual output or the specific blocker.
+
+For cleanup, list cached executables with `find "$cgx_data/bins" -type f -perm -100`. Remove the cgx cache and data directories when you want to discard their source, builds, tools, and Cargo downloads. The Hugging Face cache stores the model files separately.
