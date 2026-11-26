@@ -17,6 +17,7 @@ Rust libraries and command line tools that run AI models and search saved embedd
 - `scripts/`: shared repository maintenance and test commands. See [CONTEXT.md](scripts/CONTEXT.md).
 - `testbed_folders/`: shared standalone test workspace for the Local AI skills. See [CONTEXT.md](testbed_folders/CONTEXT.md).
 - `AGENTS.md`: the values of the Issue Fix Workflow of this repository.
+- Command to build all the packages: `pnpm build` (see README.md).
 - Command to test all the packages: `pnpm test` (fast tests), `pnpm test:full` (all the tests)
 - Command to create a worktree: `pnpm worktree:create <branch>`
 
