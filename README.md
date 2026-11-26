@@ -16,15 +16,35 @@ The Rust packages are one Cargo workspace, with one `Cargo.lock` and one folder 
 
 The worktree commands use a pinned version of [Faster Rust Work Trees](https://github.com/jeromeetienne/faster_rust_worktrees). The repository settings are in [.faster_rust_worktrees.yaml](.faster_rust_worktrees.yaml).
 
-## Skills of the coding agent
+## Local AI Rust skills
 
-The folders `.agents/skills/` (for Codex) and `.claude/skills/` (for Claude Code) hold the skills of the coding agent plugin [coding_agent_plugin](https://github.com/jeromeetienne/coding_agent_plugin), copied with this command:
+These skills teach Codex and Claude Code how to use the Local AI Rust command line tools.
+
+- [`localai_decisions`](skills/localai_decisions/SKILL.md) answers yes-or-no or multiple-choice questions with a local model and reports the selected option and probabilities.
+- [`localai_embeddings`](skills/localai_embeddings/SKILL.md) turns text into numeric vectors that represent its meaning, so you can compare texts or save the vectors for later use.
+- [`localai_llm`](skills/localai_llm/SKILL.md) generates or summarizes text with a local language model.
+- [`localai-rag`](skills/localai_rag/SKILL.md) searches collections of local Markdown and plain-text documents by meaning and cites the matching sources.
+- [`localai_vector_store`](skills/localai_vector_store/SKILL.md) saves embeddings in local collections and searches them for similar entries.
+
+### Install the skills
+
+With Node.js and npm available, run this command from the root of the project where you use Codex or Claude Code. The command installs all five Local AI Rust skills for both agents.
 
 ```bash
-npx skills add jeromeetienne/coding_agent_plugin --skill '*' --agent claude-code --agent codex --copy --yes
+npx --yes skills add heidrun-org/localai_rust \
+  --skill localai_decisions --skill localai_embeddings --skill localai_llm \
+  --skill localai-rag --skill localai_vector_store \
+  --agent codex --agent claude-code --copy --yes
 ```
 
-The file [AGENTS.md](AGENTS.md) gives the values of the Issue Fix Workflow of this repository.
+To install one skill, use its name from the list above. For example, this command installs the local document search skill.
+
+```bash
+npx --yes skills add heidrun-org/localai_rust \
+  --skill localai-rag --agent codex --agent claude-code --copy --yes
+```
+
+The commands copy each skill's instructions into `.agents/skills/` for Codex and `.claude/skills/` for Claude Code. Start a new session in your project and ask the agent to use the skill by name. The agent reuses an available command line tool and model files. On first use, the agent asks for approval if it needs to set up the command line tool with `cgx` or download model files.
 
 ## Commands
 
