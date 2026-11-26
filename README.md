@@ -52,6 +52,7 @@ Run each command at the root of the repository.
 
 - `pnpm --filter <package> cli`: runs the command line tool of a package.
 - `pnpm --filter <package> test`: runs the tests of a package.
+- `pnpm build`: runs the build scripts of the workspace packages.
 - `pnpm test`: runs the fast tests of all the packages. These tests check that the code and the model run.
 - `pnpm test:full`: runs all the tests, also the slow tests that compare the answers of the model with the reference answers.
 - `pnpm worktree:create <branch>` creates `.agents/worktrees/<branch>` from `HEAD` and installs the locked dependencies. Pass `--base main` to start from `main`.

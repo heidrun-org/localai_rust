@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
+    "build": "pnpm --recursive run build",
     "test": "pnpm --recursive test",
     "test:full": "pnpm --recursive test:full",
     "worktree:create": "faster_rust_worktrees create",
