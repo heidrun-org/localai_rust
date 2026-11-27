@@ -11,7 +11,7 @@ This folder holds the decision library and the command line tool.
 - `clef_decision_order.cpp`: the C name of the one llama.cpp function that Clef needs and that has a C++ name only.
 - `main.rs`: the command line tool, which reads a request from a file, from standard input, or from the short form, and writes JSON.
 
-- `benchmark.rs`: the command line subcommand `benchmark`, with short and long input cases, warmup, throughput, and peak process resident memory.
+- `benchmark.rs`: the command line subcommand `benchmark`, with one input text shared by the three decision types, warmup, throughput, and peak process resident memory.
 
 ## Rules
 - The command line accepts `--backend cpu|gpu` as a visible alias for `--device cpu|gpu`, including the benchmark subcommand.

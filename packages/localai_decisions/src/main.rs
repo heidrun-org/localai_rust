@@ -72,7 +72,7 @@ mod benchmark;
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Measure warmed-up decisions per second on built-in short and long text cases.
+    /// Measure warmed-up decisions per second for each decision type on one built-in text.
     Benchmark(benchmark::Arguments),
 }
 

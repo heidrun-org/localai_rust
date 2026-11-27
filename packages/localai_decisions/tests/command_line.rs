@@ -5,8 +5,14 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
-/// Returns a command for the executable built alongside this integration test.
+/// Returns a command for the executable Cargo built for this test run.
+#[allow(non_snake_case)]
 fn tool() -> Command {
+	if let Some(executablePath) = std::env::var_os("CARGO_BIN_EXE_localai_decisions") {
+		return Command::new(executablePath);
+	}
+
+	// Older Cargo versions put integration tests directly under the profile's deps directory.
 	Command::new(
 		std::env::current_exe()
 			.expect("path to the integration test executable")
