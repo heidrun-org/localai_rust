@@ -1,4 +1,5 @@
 //! Speed measurements owned by the Qwen3.5 command line tool.
+use crate::outputFormat::OutputFormat;
 use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 use localai_decisions::{DecisionConfig, DecisionEngine, Device};
@@ -48,6 +49,7 @@ pub(crate) fn run(
     arguments: Arguments,
     config: DecisionConfig,
     output: Option<PathBuf>,
+	format: Option<OutputFormat>,
 ) -> Result<()> {
 	let duration = Duration::from(arguments.duration);
 	anyhow::ensure!(duration.is_zero() == false, "The benchmark duration must be greater than zero");
@@ -109,7 +111,7 @@ pub(crate) fn run(
         durationSeconds: duration.as_secs_f64(), model_load_seconds, cases: results,
         peak_process_resident_bytes: peak_memory(),
         memory_scope: "Process resident-memory high-water mark over model loading, warmup and inference; separate GPU allocations are not measured",
-    }, &arguments, output.as_deref())
+    }, &arguments, output.as_deref(), format)
 }
 
 impl Case {
@@ -207,11 +209,16 @@ impl Measurement {
 	}
 }
 
+#[allow(non_snake_case)]
 fn write_report(
     report: &Report,
     arguments: &Arguments,
     output: Option<&std::path::Path>,
+	format: Option<OutputFormat>,
 ) -> Result<()> {
+	if let Some(outputFormat) = format {
+		return outputFormat.write(report, output);
+	}
     let json = serde_json::to_string_pretty(report)?;
     if let Some(path) = output {
         std::fs::write(path, format!("{json}\n"))

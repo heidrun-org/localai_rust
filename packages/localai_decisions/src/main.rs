@@ -1,5 +1,9 @@
 //! The command line tool: reads a request of the System One API and writes the response as JSON.
 
+#[path = "outputFormat.rs"]
+mod outputFormat;
+
+use outputFormat::OutputFormat;
 use std::io::Read;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -13,6 +17,9 @@ use serde_json::{json, Map, Value};
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Arguments {
+	/// Select text, Markdown, or JSON output.
+	#[arg(short = 'f', long, value_enum, global = true, value_name = "FORMAT")]
+	format: Option<OutputFormat>,
     #[command(subcommand)]
     command: Option<Command>,
 
@@ -83,6 +90,7 @@ fn main() {
     }
 }
 
+#[allow(non_snake_case)]
 fn run() -> Result<()> {
     let mut arguments = Arguments::parse();
     if let Some(Command::Benchmark(benchmark)) = arguments.command.take() {
@@ -100,6 +108,7 @@ fn run() -> Result<()> {
                 verbose: arguments.verbose,
             },
             arguments.output,
+			arguments.format,
         );
     }
     let request = read_request(&arguments)?;
@@ -131,6 +140,9 @@ fn run() -> Result<()> {
         eprintln!("Answered in {} ms", started.elapsed().as_millis());
     }
 
+	if let Some(outputFormat) = arguments.format {
+		return outputFormat.write(&response, arguments.output.as_deref());
+	}
     let text = serde_json::to_string_pretty(&response)? + "\n";
     match &arguments.output {
         Some(path) => std::fs::write(path, text)

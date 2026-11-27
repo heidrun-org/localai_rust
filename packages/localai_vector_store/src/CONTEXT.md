@@ -8,9 +8,10 @@ Maintain SQLite vector stores and adapt command line requests to the storage lib
 - `Store::applyRefresh` atomically removes and adds embeddings and records refresh time.
 - `Store::replaceUnpinnedEmbeddings` atomically replaces an unpinned index and records the new model revision.
 - `Store::openReadOnly` opens a saved store without write access.
-- `localai_vector_store` reads embeddings from JSON input and returns JSON output.
+- `localai_vector_store` reads embeddings from JSON input and returns formatted output.
 
 ## Rules
+- Command results follow the [command output format options](../../../README.md#command-output-formats).
 - Each store lives in its own folder and uses a single embedding model configuration.
 - Store commands use the identifier saved in the database and support both original and readable folder names.
 - New store folder names and formatted store identifiers use underscores as separators.

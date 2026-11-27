@@ -64,3 +64,15 @@ To apply a cleanup, stop the affected builds and use `--apply`. Replace the form
 The tests of `localai_decisions` need a large model (0.81 GB). The first run downloads it into the Hugging Face cache. The build of `localai_decisions` needs `cmake`.
 
 The slow tests of `localai_llm` need the model LiquidAI/LFM2.5-1.2B-Instruct (0.73 GB), which the first run downloads into the Hugging Face cache. The build of `localai_llm` needs `cmake`.
+
+## Command output formats
+
+All five commands, including their subcommands, accept `--format <format>` or `-f <format>`.
+
+- `text` prints human-readable output and uses color only when standard output is a terminal.
+- `markdown` prints a Markdown list of result fields.
+- `json` prints one JSON document without terminal color codes.
+
+Omitting the option keeps the command's existing output. When a command accepts `--output`,
+an explicit format also applies to that file and the file contains no terminal color codes.
+For `localai_embeddings` input files, use `--file <path>`. The short option `-f` selects the output format.

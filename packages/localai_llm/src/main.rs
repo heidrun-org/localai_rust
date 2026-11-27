@@ -1,6 +1,10 @@
 //! The command line tool: reads a prompt and writes the text that the model generates.
 
-use std::io::{Read, Write};
+#[path = "outputFormat.rs"]
+mod outputFormat;
+
+use outputFormat::OutputFormat;
+use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -13,6 +17,9 @@ use serde::Serialize;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Arguments {
+	/// Select text, Markdown, or JSON output.
+	#[arg(short = 'f', long, value_enum, global = true, value_name = "FORMAT")]
+	format: Option<OutputFormat>,
     #[command(subcommand)]
     command: Option<Command>,
 
@@ -114,6 +121,7 @@ fn main() {
     }
 }
 
+#[allow(non_snake_case)]
 fn run() -> Result<()> {
     let mut arguments = Arguments::parse();
     let config = LlmConfig {
@@ -129,7 +137,7 @@ fn run() -> Result<()> {
         verbose: arguments.verbose,
     };
     if let Some(Command::Benchmark(benchmark)) = arguments.command.take() {
-        return benchmark::run(benchmark, config, arguments.output);
+        return benchmark::run(benchmark, config, arguments.output, arguments.format);
     }
     let request = GenerationRequest {
         prompt: read_prompt(&arguments)?,
@@ -151,11 +159,20 @@ fn run() -> Result<()> {
     }
 
     // The text appears while it grows only on standard output, without --json and without --output.
-    let streams = arguments.json == false && arguments.output.is_none();
+	let isText = match arguments.format {
+		Some(outputFormat) => outputFormat == OutputFormat::Text,
+		None => arguments.json == false,
+	};
+	let streams = isText && arguments.output.is_none();
+	let isColor = arguments.format == Some(OutputFormat::Text) && std::io::stdout().is_terminal();
     let mut stdout = std::io::stdout();
     let generation = engine.generate(&request, |part| {
         if streams {
-            print!("{part}");
+			if isColor == true {
+				print!("\x1b[36m{part}\x1b[0m");
+			} else {
+				print!("{part}");
+			}
             let _ = stdout.flush();
         }
     })?;
@@ -170,7 +187,14 @@ fn run() -> Result<()> {
         );
     }
 
-    let text = if arguments.json {
+	if let Some(outputFormat @ (OutputFormat::Markdown | OutputFormat::Json)) = arguments.format {
+		let result = JsonResult {
+			model: &arguments.model,
+			generation: &generation,
+		};
+		return outputFormat.write(&result, arguments.output.as_deref());
+	}
+    let text = if isText == false {
         let result = JsonResult {
             model: &arguments.model,
             generation: &generation,

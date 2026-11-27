@@ -7,6 +7,7 @@ Parse local documents, preserve source locations, and maintain and search saved 
 - `localai_rag` provides the create, sync, list, and search commands.
 
 ## Rules
+- Command results follow the [command output format options](../../../README.md#command-output-formats).
 - A collection refresh publishes its chunk changes and refresh time together. Searches and refreshes use the saved model revision.
 - Search reads saved chunks and ranks documents by their highest matching chunk score.
 - Chunk ranges refer to the original file bytes even when embedding input includes added Markdown context.

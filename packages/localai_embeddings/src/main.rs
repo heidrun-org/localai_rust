@@ -1,3 +1,9 @@
+//! Command line for local text embeddings.
+
+#[path = "outputFormat.rs"]
+mod outputFormat;
+
+use outputFormat::OutputFormat;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use localai_embeddings::{
@@ -16,6 +22,9 @@ use std::time::{Duration, Instant};
     about = "Compute text embeddings locally"
 )]
 struct Arguments {
+	/// Select text, Markdown, or JSON output.
+	#[arg(short = 'f', long, value_enum, global = true, value_name = "FORMAT")]
+	format: Option<OutputFormat>,
     /// Hugging Face identifier for a supported BERT sentence embedding model.
     #[arg(long, default_value = DEFAULT_MODEL_ID)]
     model: String,
@@ -29,7 +38,7 @@ struct Arguments {
     #[arg(long = "text", short = 't')]
     texts: Vec<String>,
     /// UTF-8 text file to embed. Repeat for multiple files.
-    #[arg(long = "file", short = 'f')]
+    #[arg(long = "file")]
     files: Vec<PathBuf>,
     /// Document structure. Auto selects a mode from each file extension.
     #[arg(long, value_enum, default_value = "auto")]
@@ -49,7 +58,7 @@ struct Arguments {
     /// CPU worker count. Defaults to the inference library's automatic selection.
     #[arg(long)]
     threads: Option<NonZeroUsize>,
-    /// Save JSON output to a file instead of standard output.
+    /// Save the result to a file instead of standard output.
     #[arg(long)]
     output: Option<PathBuf>,
     /// Print progress and timing details to standard error.
@@ -221,13 +230,25 @@ fn run() -> Result<()> {
             })?
         }
     };
+	let output = match arguments.format {
+		Some(outputFormat @ (OutputFormat::Text | OutputFormat::Markdown)) => {
+			let value: serde_json::Value = serde_json::from_slice(&output)?;
+			outputFormat.render(
+				&value,
+				arguments.output.is_none() && std::io::stdout().is_terminal(),
+			)?.into_bytes()
+		}
+		Some(OutputFormat::Json) | None => output,
+	};
     if let Some(path) = arguments.output {
         std::fs::write(&path, output)
             .with_context(|| format!("Could not write `{}`", path.display()))?;
         eprintln!("Saved embedding output to {}", path.display());
     } else {
         std::io::stdout().write_all(&output)?;
-        println!();
+        if output.ends_with(b"\n") == false {
+            println!();
+        }
     }
     Ok(())
 }

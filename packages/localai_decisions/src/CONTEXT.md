@@ -9,11 +9,12 @@ This folder holds the decision library and the command line tool.
 - `template.rs`: the `systemone` template rendered with minijinja and the `tojson` filter of llama.cpp.
 - `llama.rs`: the small safe layer over the C functions of `llama-cpp-sys-2`.
 - `clef_decision_order.cpp`: the C name of the one llama.cpp function that Clef needs and that has a C++ name only.
-- `main.rs`: the command line tool, which reads a request from a file, from standard input, or from the short form, and writes JSON.
+- `main.rs`: the command line tool, which reads a request from a file, from standard input, or from the short form, and writes a formatted response.
 
 - `benchmark.rs`: the command line subcommand `benchmark`, with one input text shared by the three decision types, warmup, throughput, and peak process resident memory.
 
 ## Rules
+- Command results follow the [command output format options](../../../README.md#command-output-formats).
 - The command line accepts `--backend cpu|gpu` as a visible alias for `--device cpu|gpu`, including the benchmark subcommand.
 - `decision.rs` follows `tools/server/server-decision.cpp` of llama.cpp v0.6.0 function by function, in the same order, so that a change of llama.cpp is easy to copy.
 - Only `llama.rs` calls the C functions of llama.cpp; the other files use its safe types.

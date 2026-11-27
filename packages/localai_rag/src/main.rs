@@ -6,6 +6,10 @@ mod collection;
 #[path = "documentChunks.rs"]
 mod documentChunks;
 
+#[path = "outputFormat.rs"]
+mod outputFormat;
+
+use outputFormat::OutputFormat;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use collection::Collection;
@@ -18,6 +22,9 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(about = "Index and search named collections of local documents")]
 struct CommandLine {
+	/// Select text, Markdown, or JSON output.
+	#[arg(short = 'f', long, value_enum, global = true, value_name = "FORMAT")]
+	format: Option<OutputFormat>,
 	/// Collection storage directory, separate from document roots.
 	#[arg(long = "data-directory", global = true, env = "LOCALAI_RAG_HOME")]
 	dataDirectory: Option<PathBuf>,
@@ -50,7 +57,7 @@ enum Command {
 	},
 	/// List saved collections and when they were last refreshed.
 	List,
-	/// Search a saved index and return matching source excerpts in JSON.
+	/// Search a saved index and return matching source excerpts.
 	Search {
 		/// Collection name.
 		#[arg(long)]
@@ -68,7 +75,7 @@ enum Command {
 }
 
 impl CommandLine {
-	/// Runs the requested operation and emits its result as JSON.
+	/// Runs the requested operation and emits its result in the selected format.
 	fn run(self) -> Result<()> {
 		let parent = match self.dataDirectory {
 			Some(directory) => directory,
@@ -82,20 +89,23 @@ impl CommandLine {
 				collection,
 				root,
 				model,
-			} => Self::_writeJson(Collection::create(&parent, &collection, &root, model)?),
-			Command::Sync { collection } => Self::_writeJson(Collection::open(&parent, &collection)?.sync()?),
-			Command::List => Self::_writeJson(Collection::list(&parent)?),
+			} => Self::_writeResult(self.format, Collection::create(&parent, &collection, &root, model)?),
+			Command::Sync { collection } => Self::_writeResult(self.format, Collection::open(&parent, &collection)?.sync()?),
+			Command::List => Self::_writeResult(self.format, Collection::list(&parent)?),
 			Command::Search {
 				collection,
 				query,
 				limit,
 				chunksPerDocument,
-			} => Self::_writeJson(Collection::open(&parent, &collection)?.search(&query, limit, chunksPerDocument)?),
+			} => Self::_writeResult(self.format, Collection::open(&parent, &collection)?.search(&query, limit, chunksPerDocument)?),
 		}
 	}
 
-	/// Writes value as one JSON response and finishes the output line.
-	fn _writeJson(value: impl Serialize) -> Result<()> {
+	/// Writes value in format, defaulting to compact JSON. Returns any output error.
+	fn _writeResult(format: Option<OutputFormat>, value: impl Serialize) -> Result<()> {
+		if let Some(outputFormat) = format {
+			return outputFormat.write(&value, None);
+		}
 		let mut output = io::stdout().lock();
 		serde_json::to_writer(&mut output, &value)?;
 		writeln!(output)?;
