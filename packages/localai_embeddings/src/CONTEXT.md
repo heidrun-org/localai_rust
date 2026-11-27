@@ -7,7 +7,7 @@ This folder contains the public embedding library and the command line interface
 - `lib.rs`: model loading with optional stage timings, CPU and optional accelerator selection, embedding, and similarity calculation.
 - `EmbeddingEngine::loadAtRevision` and `EmbeddingEngine::modelRevision` let a caller reuse the same model snapshot.
 - `EmbeddingEngine::countTokens` and `EmbeddingEngine::splitRetrievalText` support source-preserving retrieval chunking.
-- `main.rs`: reads text from arguments, standard input, or files, reports optional verbose progress, and writes JSON output.
+- `main.rs`: reads text from arguments, standard input, or files, reports benchmark progress and optional verbose details, and writes JSON output.
 - `chunking.rs`: selects structural boundaries and splits oversized blocks at tokenizer boundaries.
 
 ## Rules

@@ -127,7 +127,7 @@ fn run() -> Result<()> {
     if arguments.compare && inputs.len() != 2 {
         bail!("`--compare` requires exactly two text inputs or files")
     }
-    if arguments.verbose {
+    if arguments.verbose == true || arguments.benchmark.is_some() == true {
         eprintln!(
             "Model files: {}.",
             if arguments.check_model_updates {
@@ -234,6 +234,7 @@ fn run_benchmark(
     overlap: usize,
     rounds: usize,
 ) -> Result<Vec<u8>> {
+	eprintln!("Warming up the embeddings benchmark with {} input(s)...", inputs.len());
     let warmup = compute_documents(engine, inputs, overlap)?;
     let chunks = warmup
         .iter()
@@ -263,6 +264,7 @@ fn run_benchmark(
         })
         .sum::<usize>();
     let bytes = inputs.iter().map(|input| input.text.len()).sum::<usize>();
+	eprintln!("Measuring {rounds} benchmark round(s)...");
     let started = Instant::now();
     for _ in 0..rounds {
         std::hint::black_box(compute_documents(engine, inputs, overlap)?);
