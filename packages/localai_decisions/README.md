@@ -103,9 +103,9 @@ Run the reusable benchmark directly through this package's command line:
 pnpm --filter localai_decisions cli benchmark
 ```
 
-The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. After one warm-up decision, each selected type runs for its own measurement window. Set the window with `--duration <time>`, which defaults to `10s` and accepts values such as `500ms` or `1m`. Use `--type choice|noul|score|all` to select the types. The default is `all`.
+The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. Set the total measurement time with `--duration <time>`, which defaults to `10s` and accepts values such as `500ms` or `1m`. The command divides that time equally among the selected types and runs one warm-up decision before measuring each type. Use `--type choice|noul|score|all` to select the types. The default is `all`.
 
-The table shows the input token count, completed decisions, measured seconds, seconds per decision, and decisions per second. When the window expires, the benchmark lets the current decision finish. Decisions per second is the number of completed decisions divided by the actual measured seconds, including the final decision. The timed results exclude model loading and warm-up. The JSON report includes the requested duration and warm-up time. Qwen token counts include the prompts used for one question, while Candle token counts include the encoded text and labels, so token counts from the two models are not directly comparable.
+The table shows the input token count, completed decisions, measured seconds, seconds per decision, and decisions per second. When the window expires, the benchmark lets the current decision finish. Decisions per second is the number of completed decisions divided by the actual measured seconds, including the final decision. The timed results exclude model loading and warm-up. The JSON report includes the requested total measurement time as `duration_seconds` and the warm-up time for each type. Qwen token counts include the prompts used for one question, while Candle token counts include the encoded text and labels, so token counts from the two models are not directly comparable.
 
 Useful options:
 
