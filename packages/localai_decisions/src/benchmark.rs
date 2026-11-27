@@ -12,7 +12,7 @@ use std::{
 #[derive(Debug, Args)]
 #[allow(non_snake_case)]
 pub(crate) struct Arguments {
-	/// Measurement duration after warm-up, for example 500ms, 10s, or 1m.
+	/// Total measurement time across selected decision types, excluding warm-up (for example 500ms, 10s, or 1m).
 	#[arg(long, value_name = "TIME", default_value = "10s")]
 	duration: humantime::Duration,
 	/// Decision type to measure. Example: benchmark --type score --duration 1s.
@@ -69,10 +69,13 @@ pub(crate) fn run(
     let started = Instant::now();
     let engine = DecisionEngine::load(config.clone())?;
     let model_load_seconds = started.elapsed().as_secs_f64();
-    let mut results = Vec::new();
-	for case in Case::_builtIn().into_iter().filter(|case| {
-		arguments.decisionType == DecisionType::All || case.kind == arguments.decisionType
-	}) {
+	let selectedCases: Vec<_> = Case::_builtIn()
+		.into_iter()
+		.filter(|case| arguments.decisionType == DecisionType::All || case.kind == arguments.decisionType)
+		.collect();
+	let durationPerCase = (duration / selectedCases.len() as u32).max(Duration::from_nanos(1));
+	let mut results = Vec::with_capacity(selectedCases.len());
+	for case in selectedCases {
         let warmup = Instant::now();
         let response = engine.decide(&case.request)?;
         let warmup_seconds = warmup.elapsed().as_secs_f64();
@@ -80,10 +83,14 @@ pub(crate) fn run(
             .as_u64()
             .context("The model returned no input token count")?
             as usize;
-		eprintln!("Measuring {:?} for {}...", case.kind, arguments.duration);
+		eprintln!(
+			"Measuring {:?} for {}...",
+			case.kind,
+			humantime::format_duration(durationPerCase),
+		);
         let started = Instant::now();
         let measurement = Measurement::_measure(
-            duration,
+            durationPerCase,
             || {
                 engine.decide(&case.request)?;
                 Ok(())
@@ -163,7 +170,7 @@ struct Report {
     package: &'static str,
     model: String,
     backend: &'static str,
-	/// Requested time per selected decision type, in seconds.
+	/// Requested total measurement time across selected decision types, in seconds.
 	#[serde(rename = "duration_seconds")]
 	durationSeconds: f64,
     model_load_seconds: f64,
@@ -221,7 +228,7 @@ fn write_report(
         report.model_load_seconds
     );
     println!(
-        "Requested {:.3} seconds per selected decision type after warm-up.",
+        "Requested {:.3} seconds of total measurement time across selected decision types.",
         report.durationSeconds
     );
     println!(

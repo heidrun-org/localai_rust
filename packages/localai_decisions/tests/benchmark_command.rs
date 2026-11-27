@@ -42,6 +42,7 @@ fn benchmark_is_a_discoverable_subcommand() {
     assert!(!help.contains("--labels"));
     assert!(!help.contains("--seconds"));
     assert!(help.contains("[default: 10s]"));
+	assert!(help.contains("Total measurement time across selected decision types"));
 	for decisionType in ["choice", "noul", "score", "all"] {
 		assert!(help.contains(decisionType), "{help}");
 	}
