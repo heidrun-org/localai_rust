@@ -31,10 +31,8 @@ These skills teach Codex and Claude Code how to use the Local AI Rust command li
 With Node.js and npm available, run this command from the root of the project where you use Codex or Claude Code. The command installs all five Local AI Rust skills for both agents.
 
 ```bash
-npx --yes skills add heidrun-org/localai_rust \
-  --skill localai_decisions --skill localai_embeddings --skill localai_llm \
-  --skill localai-rag --skill localai_vector_store \
-  --agent codex --agent claude-code --copy --yes
+npx --yes skills add https://github.com/heidrun-org/localai_rust/tree/main/skills \
+  --skill '*' --agent codex claude-code --copy --yes
 ```
 
 To install one skill, use its name from the list above. For example, this command installs the local document search skill.
