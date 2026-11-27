@@ -27,17 +27,19 @@ fn benchmark_is_a_discoverable_subcommand() {
     assert!(output.status.success());
     let help = String::from_utf8_lossy(&output.stdout);
 	assert_eq!(help.contains("--profile"), false);
-    for option in ["--model", "--generations", "--max-tokens", "--output", "--json", "--device", "--backend"] {
+    for option in ["--model", "--duration", "--max-tokens", "--output", "--json", "--device", "--backend"] {
         assert!(help.contains(option), "{help}");
     }
-    assert!(help.contains("[default: 3]"));
+    assert!(help.contains("[default: 10s]"));
 }
 
+/// Checks invalid options before model loading.
 #[test]
-fn invalid_benchmark_counts_and_device_fail_before_model_loading() {
+#[allow(non_snake_case)]
+fn invalidBenchmarkOptionsFailBeforeModelLoading() {
     for args in [
-        vec!["benchmark", "--generations", "0"],
-        vec!["benchmark", "--generations", "-1"],
+        vec!["benchmark", "--duration", "0s"],
+        vec!["benchmark", "--duration", "bogus"],
         vec!["benchmark", "--max-tokens", "0"],
         vec!["benchmark", "--device", "unknown"],
         vec!["benchmark", "--backend", "unknown"],

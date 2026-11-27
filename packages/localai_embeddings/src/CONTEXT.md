@@ -7,10 +7,11 @@ This folder contains the public embedding library and the command line interface
 - `lib.rs`: model loading with optional stage timings, CPU and optional accelerator selection, embedding, and similarity calculation.
 - `EmbeddingEngine::loadAtRevision` and `EmbeddingEngine::modelRevision` let a caller reuse the same model snapshot.
 - `EmbeddingEngine::countTokens` and `EmbeddingEngine::splitRetrievalText` support source-preserving retrieval chunking.
-- `main.rs`: reads text from arguments, standard input, or files, reports optional verbose progress, and writes JSON output.
+- `main.rs`: reads text from arguments, standard input, or files, reports benchmark progress and optional verbose details, and writes JSON output.
 - `chunking.rs`: selects structural boundaries and splits oversized blocks at tokenizer boundaries.
 
 ## Rules
+- The benchmark measures complete passes over the supplied inputs after warm-up and reports original text in mebibytes per measured second.
 - Validate that a selected model is a supported BERT sentence embedding model before loading its weights.
 - Apply the tokenizer attention mask during mean pooling and normalize vectors before comparing them.
 - Keep model inference local to the selected device.
