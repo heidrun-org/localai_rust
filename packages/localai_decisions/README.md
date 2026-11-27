@@ -103,14 +103,14 @@ Run the reusable benchmark directly through this package's command line:
 pnpm --filter localai_decisions cli benchmark
 ```
 
-The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. Each decision type runs once before timing starts, then completes five measured decisions by default. Model loading and warmup are excluded from the speed measurement. Reading the returned probabilities completes GPU work before the timer starts.
+The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. After one warm-up decision, each selected type runs for its own measurement window. Set the window with `--duration <time>`, which defaults to `10s` and accepts values such as `500ms` or `1m`. Use `--type choice|noul|score|all` to select the types. The default is `all`.
 
-The table shows the input token count, total measured seconds, average seconds per decision, and decisions per second. Every requested decision finishes, even when one decision takes longer than five seconds. Average seconds per decision is total measured time divided by the number of completed decisions; decisions per second is the number of completed decisions divided by total measured time. The JSON also records the requested and completed counts. Qwen token counts include the prompts used for one question, while Candle token counts include the encoded text and labels, so token counts from the two models are not directly comparable.
+The table shows the input token count, completed decisions, measured seconds, seconds per decision, and decisions per second. When the window expires, the benchmark lets the current decision finish. Decisions per second is the number of completed decisions divided by the actual measured seconds, including the final decision. The timed results exclude model loading and warm-up. The JSON report includes the requested duration and warm-up time. Qwen token counts include the prompts used for one question, while Candle token counts include the encoded text and labels, so token counts from the two models are not directly comparable.
 
 Useful options:
 
 ```bash
-pnpm --filter localai_decisions cli benchmark --decisions 10
+pnpm --filter localai_decisions cli benchmark --type score --duration 1s
 pnpm --filter localai_decisions cli benchmark --output /tmp/localai_decisions-speed.json
 pnpm --silent --filter localai_decisions cli benchmark --json
 ```
@@ -121,7 +121,7 @@ pnpm --silent --filter localai_decisions cli benchmark --json
 GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
 ```
 
-The selected backend runs all three decision types on the same fixed text. No dataset download or separate benchmark package is needed.
+The selected backend runs the selected decision types on the same fixed text. No dataset download or separate benchmark package is needed.
 
 Peak process resident memory covers model loading, warmup, and measured inference. It is the operating system's high-water mark for this process, not a measurement of separate GPU allocations. MiB means 1,048,576 bytes. Unsupported operating systems omit the memory value. Speed and memory vary with hardware and other running programs.
 

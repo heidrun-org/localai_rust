@@ -24,6 +24,7 @@ vulkan = ["llama-cpp-sys-2/vulkan"]
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+humantime = "2"
 hf-hub = { version = "1", features = ["blocking"] }
 libc = "0.2"
 # llama-cpp-sys-2 0.1.160 builds llama.cpp v0.6.0 (commit d81235049384534c167caea52b85a694f6103d14).

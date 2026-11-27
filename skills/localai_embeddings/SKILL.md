@@ -40,7 +40,7 @@ A larger cosine similarity means the model considers the passages more similar. 
 - `--chunking auto|text|markdown|lines|code` chooses how to split documents. The default, `auto`, infers the format from the file extension. `--overlap-tokens N` sets the maximum repeated tokens between adjacent chunks and defaults to zero.
 - `--model OWNER/REPO` selects a compatible BERT sentence embedding model with mean pooling. `--check-model-updates` checks for a newer copy and can download files, so use it only after approval.
 - `--backend cpu|cuda|metal|wasm` chooses the runtime. Use `cpu` with the installation described below. CUDA and Metal require compatible hardware and build features. WebAssembly needs a separate browser build. `--threads N` sets the number of processor workers.
-- `--benchmark N` measures N rounds after one warm-up round and excludes model loading. `-v` or `--verbose` writes progress and timing information to standard error. `-h` or `--help` lists the options provided by the installed executable.
+- `--benchmark --duration 10s` measures mebibytes of original input text per second after one warm-up pass. The duration defaults to 10 seconds. `-v` or `--verbose` writes progress and timing information to standard error. `-h` or `--help` lists the options provided by the installed executable.
 
 ## Choose a model by download size
 

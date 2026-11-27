@@ -14,4 +14,5 @@ This folder holds the generation library and the command line tool.
 - The chat template comes from the model file, through `llama_chat_apply_template`, which knows a fixed list of templates; the package does not render Jinja templates.
 - The timer of the prompt evaluation stops after `llama_synchronize`, because a GPU evaluation continues after `llama_decode` returns.
 - The command line accepts `--backend cpu|gpu` as a visible alias for `--device cpu|gpu`, including the benchmark subcommand.
-- Benchmark timers exclude model loading and warmup, the benchmark always takes the most probable token, and it never replaces the selected backend.
+- Benchmark timing excludes model loading and warm-up, stops starting generations at the requested duration, and counts the final generation when it finishes.
+- The benchmark always takes the most probable token and uses the selected backend.
