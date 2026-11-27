@@ -19,6 +19,7 @@ fn tool() -> Command {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn benchmark_is_a_discoverable_subcommand() {
     let output = tool().arg("--help").output().unwrap();
     assert!(output.status.success());
@@ -29,7 +30,8 @@ fn benchmark_is_a_discoverable_subcommand() {
 	assert_eq!(help.contains("--profile"), false);
     for option in [
         "--model",
-        "--decisions",
+        "--duration",
+        "--type",
         "--output",
         "--json",
         "--device",
@@ -39,14 +41,20 @@ fn benchmark_is_a_discoverable_subcommand() {
     }
     assert!(!help.contains("--labels"));
     assert!(!help.contains("--seconds"));
-    assert!(help.contains("[default: 5]"));
+    assert!(help.contains("[default: 10s]"));
+	for decisionType in ["choice", "noul", "score", "all"] {
+		assert!(help.contains(decisionType), "{help}");
+	}
 }
 
+/// Checks invalid options before model loading.
 #[test]
-fn invalid_benchmark_count_and_device_fail_before_model_loading() {
+#[allow(non_snake_case)]
+fn invalidBenchmarkDurationAndDeviceFailBeforeModelLoading() {
     for args in [
-        vec!["benchmark", "--decisions", "0"],
-        vec!["benchmark", "--decisions", "-1"],
+        vec!["benchmark", "--duration", "0s"],
+        vec!["benchmark", "--duration", "bogus"],
+        vec!["benchmark", "--type", "unknown"],
         vec!["benchmark", "--device", "unknown"],
         vec!["benchmark", "--backend", "unknown"],
     ] {

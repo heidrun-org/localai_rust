@@ -1,6 +1,6 @@
 //! Speed measurements owned by the Qwen3.5 command line tool.
 use anyhow::{Context, Result};
-use clap::Args;
+use clap::{Args, ValueEnum};
 use localai_decisions::{DecisionConfig, DecisionEngine, Device};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -10,25 +10,47 @@ use std::{
 };
 
 #[derive(Debug, Args)]
+#[allow(non_snake_case)]
 pub(crate) struct Arguments {
-    /// Completed decisions per decision type, after loading and warmup.
-    #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u64).range(1..))]
-    decisions: u64,
+	/// Measurement duration after warm-up, for example 500ms, 10s, or 1m.
+	#[arg(long, value_name = "TIME", default_value = "10s")]
+	duration: humantime::Duration,
+	/// Decision type to measure. Example: benchmark --type score --duration 1s.
+	#[arg(long = "type", value_enum, default_value = "all")]
+	decisionType: DecisionType,
     /// Print JSON instead of the table.
     #[arg(long)]
     json: bool,
 }
 
+/// Decision types accepted by the benchmark.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ValueEnum)]
+enum DecisionType {
+	/// Choice among named options.
+	Choice,
+	/// Yes-or-no decision.
+	Noul,
+	/// Choice among ordered levels.
+	Score,
+	/// Measure each supported type.
+	All,
+}
+
+/// A decision type and its representative request.
 struct Case {
-    name: &'static str,
+	/// Decision type used for filtering and reporting.
+	kind: DecisionType,
     request: Value,
 }
 
+#[allow(non_snake_case)]
 pub(crate) fn run(
     arguments: Arguments,
     config: DecisionConfig,
     output: Option<PathBuf>,
 ) -> Result<()> {
+	let duration = Duration::from(arguments.duration);
+	anyhow::ensure!(duration.is_zero() == false, "The benchmark duration must be greater than zero");
     let backend = match config.device {
         Device::Cpu => "cpu",
         Device::Gpu => {
@@ -48,7 +70,9 @@ pub(crate) fn run(
     let engine = DecisionEngine::load(config.clone())?;
     let model_load_seconds = started.elapsed().as_secs_f64();
     let mut results = Vec::new();
-    for case in Case::_builtIn() {
+	for case in Case::_builtIn().into_iter().filter(|case| {
+		arguments.decisionType == DecisionType::All || case.kind == arguments.decisionType
+	}) {
         let warmup = Instant::now();
         let response = engine.decide(&case.request)?;
         let warmup_seconds = warmup.elapsed().as_secs_f64();
@@ -56,13 +80,10 @@ pub(crate) fn run(
             .as_u64()
             .context("The model returned no input token count")?
             as usize;
-        eprintln!(
-            "Measuring {}: {} decisions...",
-            case.name, arguments.decisions
-        );
+		eprintln!("Measuring {:?} for {}...", case.kind, arguments.duration);
         let started = Instant::now();
-        let measurement = measure_decisions(
-            arguments.decisions,
+        let measurement = Measurement::_measure(
+            duration,
             || {
                 engine.decide(&case.request)?;
                 Ok(())
@@ -70,7 +91,7 @@ pub(crate) fn run(
             || started.elapsed(),
         )?;
         results.push(CaseResult {
-            case: case.name,
+            case: case.kind,
             input_tokens,
             warmup_seconds,
             measurement,
@@ -78,7 +99,7 @@ pub(crate) fn run(
     }
     write_report(&Report {
         package: "localai_decisions", model: config.model.clone(), backend,
-        decisions_per_case: arguments.decisions, model_load_seconds, cases: results,
+        durationSeconds: duration.as_secs_f64(), model_load_seconds, cases: results,
         peak_process_resident_bytes: peak_memory(),
         memory_scope: "Process resident-memory high-water mark over model loading, warmup and inference; separate GPU allocations are not measured",
     }, &arguments, output.as_deref())
@@ -91,7 +112,7 @@ impl Case {
 		let text = "I was charged twice for my order. Please refund the extra payment today.";
 		[
 			(
-				"Choice",
+				DecisionType::Choice,
 				json!({
 					"type": "choice",
 					"instructions": "Which team should handle this?",
@@ -99,11 +120,11 @@ impl Case {
 				}),
 			),
 			(
-				"Noul",
+				DecisionType::Noul,
 				json!({"type": "noul", "instructions": "Does the customer ask for a refund?"}),
 			),
 			(
-				"Score",
+				DecisionType::Score,
 				json!({
 					"type": "score",
 					"instructions": "How urgent is this request?",
@@ -111,14 +132,14 @@ impl Case {
 				}),
 			),
 		]
-		.map(|(name, question)| Self {
-			name,
+		.map(|(kind, question)| Self {
+			kind,
 			request: json!({"state": text, "questions": {"decision": question}}),
 		})
 	}
 }
 
-/// Timing of a fixed number of fully completed decisions.
+/// Timing of the completed decisions in one measurement.
 #[derive(Debug, Serialize)]
 struct Measurement {
     completed_decisions: u64,
@@ -129,7 +150,7 @@ struct Measurement {
 
 #[derive(Debug, Serialize)]
 struct CaseResult {
-    case: &'static str,
+    case: DecisionType,
     input_tokens: usize,
     warmup_seconds: f64,
     #[serde(flatten)]
@@ -137,40 +158,46 @@ struct CaseResult {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
 struct Report {
     package: &'static str,
     model: String,
     backend: &'static str,
-    decisions_per_case: u64,
+	/// Requested time per selected decision type, in seconds.
+	#[serde(rename = "duration_seconds")]
+	durationSeconds: f64,
     model_load_seconds: f64,
     cases: Vec<CaseResult>,
     peak_process_resident_bytes: Option<u64>,
     memory_scope: &'static str,
 }
 
-fn measure_decisions(
-    decisions: u64,
-    mut decide: impl FnMut() -> Result<()>,
-    mut elapsed: impl FnMut() -> Duration,
-) -> Result<Measurement> {
-    anyhow::ensure!(
-        decisions > 0,
-        "The decision count must be greater than zero"
-    );
-    for _ in 0..decisions {
-        decide()?;
-    }
-    let total_seconds = elapsed().as_secs_f64();
-    anyhow::ensure!(
-        total_seconds > 0.0,
-        "The measured elapsed time must be greater than zero"
-    );
-    Ok(Measurement {
-        completed_decisions: decisions,
-        total_seconds,
-        seconds_per_decision: total_seconds / decisions as f64,
-        decisions_per_second: decisions as f64 / total_seconds,
-    })
+impl Measurement {
+	/// Runs decisions until the elapsed callback reaches the requested duration.
+	/// Returns the completed count and rates, or the first decision error.
+	#[allow(non_snake_case)]
+	fn _measure(
+		duration: Duration,
+		mut decideFn: impl FnMut() -> Result<()>,
+		mut elapsedFn: impl FnMut() -> Duration,
+	) -> Result<Self> {
+		anyhow::ensure!(duration.is_zero() == false, "The benchmark duration must be greater than zero");
+		let mut completedDecisions = 0;
+		let totalSeconds = loop {
+			decideFn()?;
+			completedDecisions += 1;
+			let elapsed = elapsedFn();
+			if elapsed >= duration {
+				break elapsed.as_secs_f64();
+			}
+		};
+		Ok(Self {
+			completed_decisions: completedDecisions,
+			total_seconds: totalSeconds,
+			seconds_per_decision: totalSeconds / completedDecisions as f64,
+			decisions_per_second: completedDecisions as f64 / totalSeconds,
+		})
+	}
 }
 
 fn write_report(
@@ -194,18 +221,19 @@ fn write_report(
         report.model_load_seconds
     );
     println!(
-        "Measured {} completed decisions per decision type after warmup.",
-        report.decisions_per_case
+        "Requested {:.3} seconds per selected decision type after warm-up.",
+        report.durationSeconds
     );
     println!(
-        "{:<24} {:>12} {:>13} {:>16} {:>16}",
-        "Decision type", "Input tokens", "Total seconds", "Seconds/decision", "Decisions/second"
+        "{:<15} {:>12} {:>10} {:>13} {:>16} {:>16}",
+        "Decision type", "Input tokens", "Decisions", "Total seconds", "Seconds/decision", "Decisions/second"
     );
     for result in &report.cases {
         println!(
-            "{:<24} {:>12} {:>13.3} {:>16.4} {:>16.2}",
+            "{:<15?} {:>12} {:>10} {:>13.3} {:>16.4} {:>16.2}",
             result.case,
             result.input_tokens,
+            result.measurement.completed_decisions,
             result.measurement.total_seconds,
             result.measurement.seconds_per_decision,
             result.measurement.decisions_per_second
@@ -253,8 +281,8 @@ mod tests {
     fn benchmark_completes_five_decisions_and_calculates_average_time_and_rate() {
         let clock = Cell::new(0);
         let calls = Cell::new(0);
-        let result = measure_decisions(
-            5,
+        let result = Measurement::_measure(
+            Duration::from_secs(10),
             || {
                 calls.set(calls.get() + 1);
                 clock.set(clock.get() + 2000);
@@ -273,8 +301,8 @@ mod tests {
     #[test]
     fn benchmark_waits_for_slow_decisions_instead_of_returning_zero() {
         let clock = Cell::new(0);
-        let result = measure_decisions(
-            5,
+        let result = Measurement::_measure(
+            Duration::from_secs(10),
             || {
                 clock.set(clock.get() + 6000);
                 Ok(())
@@ -282,8 +310,8 @@ mod tests {
             || Duration::from_millis(clock.get()),
         )
         .unwrap();
-        assert_eq!(result.completed_decisions, 5);
-        assert_eq!(result.total_seconds, 30.0);
+        assert_eq!(result.completed_decisions, 2);
+        assert_eq!(result.total_seconds, 12.0);
         assert_eq!(result.seconds_per_decision, 6.0);
         assert_eq!(result.decisions_per_second, 1.0 / 6.0);
     }
@@ -291,8 +319,8 @@ mod tests {
     #[test]
     fn benchmark_reports_errors_instead_of_counting_failed_decisions() {
         let calls = Cell::new(0);
-        let result = measure_decisions(
-            5,
+        let result = Measurement::_measure(
+            Duration::from_secs(10),
             || {
                 calls.set(calls.get() + 1);
                 if calls.get() == 3 {
@@ -300,24 +328,26 @@ mod tests {
                 }
                 Ok(())
             },
-            || Duration::from_secs(10),
+            || Duration::from_secs(calls.get()),
         );
         assert!(result.is_err());
         assert_eq!(calls.get(), 3);
     }
 
-    #[test]
-    fn benchmark_rejects_zero_decisions_and_zero_elapsed_time() {
-        assert!(measure_decisions(0, || panic!("must not run"), || Duration::ZERO).is_err());
-        assert!(measure_decisions(5, || Ok(()), || Duration::ZERO).is_err());
-    }
+	/// Checks that zero duration is rejected before starting work.
+	#[test]
+	#[allow(non_snake_case)]
+	fn benchmarkRejectsZeroDuration() {
+		assert!(Measurement::_measure(Duration::ZERO, || panic!("must not run"), || Duration::ZERO).is_err());
+	}
 
 	/// Checks that each decision type asks one question about the existing benchmark input.
 	#[test]
 	#[allow(non_snake_case)]
 	fn benchmarkUsesOneTextForAllDecisionTypes() {
 		let cases = Case::_builtIn();
-		assert_eq!(cases.each_ref().map(|case| case.name), ["Choice", "Noul", "Score"]);
+		assert_eq!(cases.each_ref().map(|case| case.kind),
+			[DecisionType::Choice, DecisionType::Noul, DecisionType::Score]);
 		for (case, decisionType) in cases.iter().zip(["choice", "noul", "score"]) {
 			assert_eq!(
 				case.request["state"],

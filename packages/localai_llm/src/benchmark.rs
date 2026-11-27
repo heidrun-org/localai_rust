@@ -10,9 +10,9 @@ use std::{
 
 #[derive(Debug, Args)]
 pub(crate) struct Arguments {
-    /// Completed generations, after loading and warmup.
-    #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(1..))]
-    generations: u64,
+	/// Measurement duration after warm-up, for example 500ms, 10s, or 1m.
+	#[arg(long, value_name = "TIME", default_value = "10s")]
+	duration: humantime::Duration,
     /// The largest number of generated tokens of one generation.
     #[arg(long, default_value_t = 128, value_parser = clap::value_parser!(u64).range(1..))]
     max_tokens: u64,
@@ -31,6 +31,8 @@ const BENCHMARK_SAMPLER: SamplerSettings = SamplerSettings {
 
 #[allow(non_snake_case)]
 pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBuf>) -> Result<()> {
+	let duration = Duration::from(arguments.duration);
+	anyhow::ensure!(duration.is_zero() == false, "The benchmark duration must be greater than zero");
     let backend = match config.device {
         Device::Cpu => "cpu",
         Device::Gpu => {
@@ -57,10 +59,10 @@ pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBu
 	let warmup = Instant::now();
 	engine.generate(&request, |_| {})?;
 	let warmupSeconds = warmup.elapsed().as_secs_f64();
-	eprintln!("Measuring {} generations...", arguments.generations);
+	eprintln!("Measuring generations for {}...", arguments.duration);
 	let started = Instant::now();
-	let measurement = measure_generations(
-		arguments.generations,
+	let measurement = Measurement::_measure(
+		duration,
 		|| engine.generate(&request, |_| {}),
 		|| started.elapsed(),
 	)?;
@@ -71,6 +73,7 @@ pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBu
             backend,
             max_tokens: arguments.max_tokens,
             model_load_seconds,
+			durationSeconds: duration.as_secs_f64(),
 			warmupSeconds,
 			measurement,
             peak_process_resident_bytes: peak_memory(),
@@ -81,7 +84,7 @@ pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBu
     )
 }
 
-/// Timing of a fixed number of fully completed generations.
+/// Timing of the completed generations in one measurement.
 #[derive(Debug, Serialize)]
 struct Measurement {
     completed_generations: u64,
@@ -101,6 +104,9 @@ struct Report {
     backend: &'static str,
     max_tokens: u64,
     model_load_seconds: f64,
+	/// Requested measurement duration in seconds.
+	#[serde(rename = "duration_seconds")]
+	durationSeconds: f64,
 	/// Seconds spent on the generation that precedes the timed measurements.
 	#[serde(rename = "warmup_seconds")]
 	warmupSeconds: f64,
@@ -111,39 +117,47 @@ struct Report {
     memory_scope: &'static str,
 }
 
-/// Runs `count` generations, adds their token counts and times, and divides by the total time.
-fn measure_generations(
-    count: u64,
-    mut generate: impl FnMut() -> Result<Generation>,
-    mut elapsed: impl FnMut() -> Duration,
-) -> Result<Measurement> {
-    anyhow::ensure!(count > 0, "The generation count must be greater than zero");
-    let mut prompt_tokens = 0;
-    let mut generated_tokens = 0;
-    let mut prompt_seconds = 0.0;
-    let mut generation_seconds = 0.0;
-    for _ in 0..count {
-        let generation = generate()?;
-        prompt_tokens += generation.prompt_tokens;
-        generated_tokens += generation.generated_tokens;
-        prompt_seconds += generation.prompt_seconds;
-        generation_seconds += generation.generation_seconds;
-    }
-    let total_seconds = elapsed().as_secs_f64();
-    anyhow::ensure!(total_seconds > 0.0, "The measured elapsed time must be greater than zero");
-    anyhow::ensure!(
-        prompt_seconds > 0.0 && generation_seconds > 0.0,
-        "The measured prompt time and generation time must be greater than zero"
-    );
-    Ok(Measurement {
-        completed_generations: count,
-        prompt_tokens: prompt_tokens / count as usize,
-        generated_tokens: generated_tokens / count as usize,
-        total_seconds,
-        seconds_per_generation: total_seconds / count as f64,
-        prompt_tokens_per_second: prompt_tokens as f64 / prompt_seconds,
-        generated_tokens_per_second: generated_tokens as f64 / generation_seconds,
-    })
+impl Measurement {
+	/// Runs generations until the elapsed callback reaches the requested duration.
+	/// Returns the completed count, elapsed time and phase rates, or the first generation error.
+	#[allow(non_snake_case)]
+	fn _measure(
+		duration: Duration,
+		mut generateFn: impl FnMut() -> Result<Generation>,
+		mut elapsedFn: impl FnMut() -> Duration,
+	) -> Result<Self> {
+		anyhow::ensure!(duration.is_zero() == false, "The benchmark duration must be greater than zero");
+		let mut completedGenerations = 0;
+		let mut promptTokens = 0;
+		let mut generatedTokens = 0;
+		let mut promptSeconds = 0.0;
+		let mut generationSeconds = 0.0;
+		let totalSeconds = loop {
+			let generation = generateFn()?;
+			completedGenerations += 1;
+			promptTokens += generation.prompt_tokens;
+			generatedTokens += generation.generated_tokens;
+			promptSeconds += generation.prompt_seconds;
+			generationSeconds += generation.generation_seconds;
+			let elapsed = elapsedFn();
+			if elapsed >= duration {
+				break elapsed.as_secs_f64();
+			}
+		};
+		anyhow::ensure!(
+			promptSeconds > 0.0 && generationSeconds > 0.0,
+			"The measured prompt time and generation time must be greater than zero"
+		);
+		Ok(Self {
+			completed_generations: completedGenerations,
+			prompt_tokens: promptTokens / completedGenerations as usize,
+			generated_tokens: generatedTokens / completedGenerations as usize,
+			total_seconds: totalSeconds,
+			seconds_per_generation: totalSeconds / completedGenerations as f64,
+			prompt_tokens_per_second: promptTokens as f64 / promptSeconds,
+			generated_tokens_per_second: generatedTokens as f64 / generationSeconds,
+		})
+	}
 }
 
 fn write_report(report: &Report, arguments: &Arguments, output: Option<&std::path::Path>) -> Result<()> {
@@ -159,8 +173,8 @@ fn write_report(report: &Report, arguments: &Arguments, output: Option<&std::pat
     println!("Backend: {}", report.backend);
     println!("Model loaded in {:.2} seconds (excluded from timing)", report.model_load_seconds);
 	println!(
-		"Measured {} completed generations of at most {} tokens after warmup.",
-		report.measurement.completed_generations, report.max_tokens
+		"Measured {} generations of at most {} tokens in {:.3} seconds after warm-up.",
+		report.measurement.completed_generations, report.max_tokens, report.measurement.total_seconds
 	);
 	println!(
 		"{:>13} {:>16} {:>18} {:>16} {:>19}",
@@ -224,17 +238,18 @@ mod tests {
     #[test]
     fn benchmark_completes_three_generations_and_calculates_the_rates() {
         let calls = Cell::new(0);
-        let result = measure_generations(
-            3,
+        let result = Measurement::_measure(
+            Duration::from_secs(8),
             || {
                 calls.set(calls.get() + 1);
                 Ok(generation(100, 50, 0.5, 2.5))
             },
-            || Duration::from_secs(9),
+            || Duration::from_secs(calls.get() * 3),
         )
         .unwrap();
         assert_eq!(calls.get(), 3);
         assert_eq!(result.completed_generations, 3);
+        assert_eq!(result.total_seconds, 9.0);
         assert_eq!(result.prompt_tokens, 100);
         assert_eq!(result.generated_tokens, 50);
         assert_eq!(result.seconds_per_generation, 3.0);
@@ -245,8 +260,8 @@ mod tests {
     #[test]
     fn benchmark_reports_errors_instead_of_counting_failed_generations() {
         let calls = Cell::new(0);
-        let result = measure_generations(
-            3,
+        let result = Measurement::_measure(
+            Duration::from_secs(8),
             || {
                 calls.set(calls.get() + 1);
                 if calls.get() == 2 {
@@ -254,15 +269,16 @@ mod tests {
                 }
                 Ok(generation(10, 10, 1.0, 1.0))
             },
-            || Duration::from_secs(10),
+            || Duration::from_secs(calls.get() * 2),
         );
         assert!(result.is_err());
         assert_eq!(calls.get(), 2);
     }
 
-    #[test]
-    fn benchmark_rejects_zero_generations_and_zero_elapsed_time() {
-        assert!(measure_generations(0, || panic!("must not run"), || Duration::ZERO).is_err());
-        assert!(measure_generations(3, || Ok(generation(10, 10, 1.0, 1.0)), || Duration::ZERO).is_err());
-    }
+	/// Checks that zero duration is rejected before starting work.
+	#[test]
+	#[allow(non_snake_case)]
+	fn benchmarkRejectsZeroDuration() {
+		assert!(Measurement::_measure(Duration::ZERO, || panic!("must not run"), || Duration::ZERO).is_err());
+	}
 }

@@ -5,7 +5,7 @@ This folder holds the Rust tests that run the compiled command line tool.
 
 ## Key Exports & Entry Points
 - `command_line.rs`: the prompt from the option and from standard input, the JSON result, the largest number of tokens, the output file, and the errors.
-- `benchmark_command.rs`: benchmark discovery, help, count validation, device validation, and the backend alias without loading weights.
+- `benchmark_command.rs`: benchmark discovery, help, duration and token-limit validation, device validation, and the backend alias without loading weights.
 - Command to run the fast tests: `pnpm --filter localai_llm test`
 - Command to run all the tests, also the slow tests: `pnpm --filter localai_llm test:full`
 

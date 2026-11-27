@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::io::{IsTerminal, Read, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -40,9 +40,12 @@ struct Arguments {
     /// Compare the global vectors of exactly two inputs.
     #[arg(long, conflicts_with = "benchmark")]
     compare: bool,
-    /// Measure this many rounds after one warm-up round, excluding model loading.
-    #[arg(long)]
-    benchmark: Option<NonZeroUsize>,
+	/// Measure embedding throughput after one warm-up round.
+	#[arg(long)]
+	benchmark: bool,
+	/// Benchmark duration after warm-up, for example 500ms, 10s, or 1m.
+	#[arg(long, value_name = "TIME", default_value = "10s", requires = "benchmark")]
+	duration: humantime::Duration,
     /// CPU worker count. Defaults to the inference library's automatic selection.
     #[arg(long)]
     threads: Option<NonZeroUsize>,
@@ -87,7 +90,23 @@ struct SimilarityOutput<'a> {
 }
 
 #[derive(Serialize)]
+/// Model settings and measured throughput for the supplied text.
+#[allow(non_snake_case)]
 struct BenchmarkOutput<'a> {
+	/// Primary throughput in mebibytes of original text per second.
+	input_mib_per_second: f64,
+	/// Requested measurement duration in seconds.
+	#[serde(rename = "duration_seconds")]
+	durationSeconds: f64,
+	/// Model loading time in seconds.
+	#[serde(rename = "model_load_seconds")]
+	modelLoadSeconds: f64,
+	/// Time to process the warm-up round in seconds.
+	#[serde(rename = "warmup_seconds")]
+	warmupSeconds: f64,
+	/// Total bytes of original text in completed timed rounds.
+	#[serde(rename = "total_input_bytes")]
+	totalInputBytes: u128,
     model: &'a str,
     backend: &'static str,
     build_profile: &'static str,
@@ -95,16 +114,13 @@ struct BenchmarkOutput<'a> {
     dimensions: usize,
     max_tokens: usize,
     rounds: usize,
-    documents_per_round: usize,
     chunks_per_round: usize,
     input_bytes_per_round: usize,
     chunk_tokens_per_round: usize,
     padded_tokens_per_round: usize,
     elapsed_seconds: f64,
-    documents_per_second: f64,
     embeddings_per_second: f64,
     input_bytes_per_second: f64,
-    input_mib_per_second: f64,
     chunk_tokens_per_second: f64,
     padded_tokens_per_second: f64,
 }
@@ -116,8 +132,13 @@ fn main() {
     }
 }
 
+#[allow(non_snake_case)]
 fn run() -> Result<()> {
     let arguments = Arguments::parse();
+	let duration = Duration::from(arguments.duration);
+	if arguments.benchmark == true && duration.is_zero() == true {
+		bail!("The benchmark duration must be greater than zero");
+	}
     // Set the worker count before tokenization or inference initializes worker pools.
     if let Some(threads) = arguments.threads {
         std::env::set_var("RAYON_NUM_THREADS", threads.to_string());
@@ -127,7 +148,7 @@ fn run() -> Result<()> {
     if arguments.compare && inputs.len() != 2 {
         bail!("`--compare` requires exactly two text inputs or files")
     }
-    if arguments.verbose == true || arguments.benchmark.is_some() == true {
+    if arguments.verbose == true || arguments.benchmark == true {
         eprintln!(
             "Model files: {}.",
             if arguments.check_model_updates {
@@ -148,6 +169,7 @@ fn run() -> Result<()> {
         backend: arguments.backend,
         check_model_updates: arguments.check_model_updates,
     })?;
+	let modelLoadSeconds = model_load_started.elapsed().as_secs_f64();
     if arguments.verbose {
         print_load_timings(&load_timings);
         eprintln!(
@@ -155,7 +177,7 @@ fn run() -> Result<()> {
             engine.model_id(),
             engine.dimensions(),
             engine.max_tokens(),
-            model_load_started.elapsed().as_secs_f64()
+            modelLoadSeconds
         );
         eprintln!(
             "Computing chunk and global vectors for {} input(s)...",
@@ -163,8 +185,8 @@ fn run() -> Result<()> {
         );
     }
     let embedding_started = Instant::now();
-    let output = if let Some(rounds) = arguments.benchmark {
-        run_benchmark(&mut engine, &inputs, arguments.overlap_tokens, rounds.get())?
+    let output = if arguments.benchmark == true {
+		BenchmarkOutput::measure(&mut engine, &inputs, arguments.overlap_tokens, duration, modelLoadSeconds)?
     } else {
         let documents = compute_documents(&mut engine, &inputs, arguments.overlap_tokens)?;
         if arguments.verbose {
@@ -228,75 +250,113 @@ fn compute_documents(
         .collect()
 }
 
-fn run_benchmark(
-    engine: &mut EmbeddingEngine,
-    inputs: &[Input],
-    overlap: usize,
-    rounds: usize,
-) -> Result<Vec<u8>> {
-	eprintln!("Warming up the embeddings benchmark with {} input(s)...", inputs.len());
-    let warmup = compute_documents(engine, inputs, overlap)?;
-    let chunks = warmup
-        .iter()
-        .map(|document| document.embedding.chunks.len())
-        .sum::<usize>();
-    let chunk_tokens = warmup
-        .iter()
-        .flat_map(|document| &document.embedding.chunks)
-        .map(|chunk| chunk.chunk.token_count)
-        .sum::<usize>();
-    let padded_tokens = warmup
-        .iter()
-        .map(|document| {
-            document
-                .embedding
-                .chunks
-                .chunks(8)
-                .map(|batch| {
-                    batch
-                        .iter()
-                        .map(|chunk| chunk.chunk.token_count)
-                        .max()
-                        .unwrap_or(0)
-                        * batch.len()
-                })
-                .sum::<usize>()
-        })
-        .sum::<usize>();
-    let bytes = inputs.iter().map(|input| input.text.len()).sum::<usize>();
-	eprintln!("Measuring {rounds} benchmark round(s)...");
-    let started = Instant::now();
-    for _ in 0..rounds {
-        std::hint::black_box(compute_documents(engine, inputs, overlap)?);
-    }
-    let elapsed = started.elapsed().as_secs_f64();
-    let rate = rounds as f64 / elapsed;
-    serde_json::to_vec_pretty(&BenchmarkOutput {
-        model: engine.model_id(),
-        backend: engine.backend().as_str(),
-        dimensions: engine.dimensions(),
-        max_tokens: engine.max_tokens(),
-        build_profile: if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "release"
-        },
-        cpu_threads: candle_core::utils::get_num_threads(),
-        rounds,
-        documents_per_round: inputs.len(),
-        chunks_per_round: chunks,
-        input_bytes_per_round: bytes,
-        chunk_tokens_per_round: chunk_tokens,
-        padded_tokens_per_round: padded_tokens,
-        elapsed_seconds: elapsed,
-        documents_per_second: inputs.len() as f64 * rate,
-        embeddings_per_second: chunks as f64 * rate,
-        input_bytes_per_second: bytes as f64 * rate,
-        input_mib_per_second: bytes as f64 * rate / (1024.0 * 1024.0),
-        chunk_tokens_per_second: chunk_tokens as f64 * rate,
-        padded_tokens_per_second: padded_tokens as f64 * rate,
-    })
-    .map_err(Into::into)
+impl BenchmarkOutput<'_> {
+	/// Warms up and then measures complete passes over the supplied inputs.
+	/// Uses the selected chunk overlap and duration, and returns the report as JSON bytes.
+	#[allow(non_snake_case)]
+	fn measure(
+		engine: &mut EmbeddingEngine,
+		inputs: &[Input],
+		overlap: usize,
+		duration: Duration,
+		modelLoadSeconds: f64,
+	) -> Result<Vec<u8>> {
+		eprintln!("Warming up the embeddings benchmark with {} input(s)...", inputs.len());
+		let warmupStarted = Instant::now();
+		let warmup = compute_documents(engine, inputs, overlap)?;
+		let warmupSeconds = warmupStarted.elapsed().as_secs_f64();
+		let chunks = warmup
+			.iter()
+			.map(|document| document.embedding.chunks.len())
+			.sum::<usize>();
+		let chunkTokens = warmup
+			.iter()
+			.flat_map(|document| &document.embedding.chunks)
+			.map(|chunk| chunk.chunk.token_count)
+			.sum::<usize>();
+		let paddedTokens = warmup
+			.iter()
+			.map(|document| {
+				document
+					.embedding
+					.chunks
+					.chunks(8)
+					.map(|batch| {
+						batch
+							.iter()
+							.map(|chunk| chunk.chunk.token_count)
+							.max()
+							.unwrap_or(0)
+							* batch.len()
+					})
+					.sum::<usize>()
+			})
+			.sum::<usize>();
+		drop(warmup);
+
+		let bytes = inputs.iter().map(|input| input.text.len()).sum::<usize>();
+		eprintln!("Measuring embedding throughput for {}...", humantime::format_duration(duration));
+		let started = Instant::now();
+		let (rounds, elapsed) = Self::_measureRounds(
+			duration,
+			|| {
+				std::hint::black_box(compute_documents(engine, inputs, overlap)?);
+				Ok(())
+			},
+			|| started.elapsed(),
+		)?;
+		let elapsedSeconds = elapsed.as_secs_f64();
+		let totalInputBytes = bytes as u128 * rounds as u128;
+		let bytesPerSecond = totalInputBytes as f64 / elapsedSeconds;
+		let roundsPerSecond = rounds as f64 / elapsedSeconds;
+		serde_json::to_vec_pretty(&BenchmarkOutput {
+			input_mib_per_second: bytesPerSecond / (1024.0 * 1024.0),
+			durationSeconds: duration.as_secs_f64(),
+			modelLoadSeconds,
+			warmupSeconds,
+			totalInputBytes,
+			model: engine.model_id(),
+			backend: engine.backend().as_str(),
+			dimensions: engine.dimensions(),
+			max_tokens: engine.max_tokens(),
+			build_profile: if cfg!(debug_assertions) == true {
+				"debug"
+			} else {
+				"release"
+			},
+			cpu_threads: candle_core::utils::get_num_threads(),
+			rounds,
+			chunks_per_round: chunks,
+			input_bytes_per_round: bytes,
+			chunk_tokens_per_round: chunkTokens,
+			padded_tokens_per_round: paddedTokens,
+			elapsed_seconds: elapsedSeconds,
+			embeddings_per_second: chunks as f64 * roundsPerSecond,
+			input_bytes_per_second: bytesPerSecond,
+			chunk_tokens_per_second: chunkTokens as f64 * roundsPerSecond,
+			padded_tokens_per_second: paddedTokens as f64 * roundsPerSecond,
+		})
+		.map_err(Into::into)
+	}
+
+	/// Runs one complete round at a time until the elapsed callback reaches the requested duration.
+	/// Returns the completed round count and actual elapsed duration, or the first round error.
+	#[allow(non_snake_case)]
+	fn _measureRounds(
+		duration: Duration,
+		mut roundFn: impl FnMut() -> Result<()>,
+		mut elapsedFn: impl FnMut() -> Duration,
+	) -> Result<(usize, Duration)> {
+		let mut rounds = 0;
+		loop {
+			roundFn()?;
+			rounds += 1;
+			let elapsed = elapsedFn();
+			if elapsed >= duration {
+				return Ok((rounds, elapsed));
+			}
+		}
+	}
 }
 
 fn print_load_timings(timings: &ModelLoadTimings) {
@@ -394,4 +454,47 @@ fn read_inputs(arguments: &Arguments) -> Result<Vec<Input>> {
         text,
         mode: input_mode(arguments.chunking, None),
     }])
+}
+
+#[cfg(test)]
+#[allow(non_snake_case)]
+mod benchmarkTests {
+	use super::*;
+	use std::cell::Cell;
+
+	/// Checks the completed count and elapsed time with faster and slower rounds.
+	#[test]
+	#[allow(non_snake_case)]
+	fn benchmarkCountsTheLastRound() {
+		let duration = Duration::from_secs(10);
+		for (roundSeconds, expectedRounds, expectedSeconds) in [(2, 5, 10), (6, 2, 12), (12, 1, 12)] {
+			let clock = Cell::new(Duration::ZERO);
+			let result = BenchmarkOutput::_measureRounds(
+				duration,
+				|| {
+					clock.set(clock.get() + Duration::from_secs(roundSeconds));
+					Ok(())
+				},
+				|| clock.get(),
+			)
+			.unwrap();
+			assert_eq!(result, (expectedRounds, Duration::from_secs(expectedSeconds)));
+		}
+	}
+
+	/// Checks the duration default and that an explicit duration requires benchmark mode.
+	#[test]
+	#[allow(non_snake_case)]
+	fn benchmarkParsesDuration() {
+		let normal = Arguments::try_parse_from(["localai_embeddings", "--text", "hello"]).unwrap();
+		assert_eq!(normal.benchmark, false);
+		let benchmark =
+			Arguments::try_parse_from(["localai_embeddings", "--benchmark", "--text", "hello"]).unwrap();
+		assert_eq!(Duration::from(benchmark.duration), Duration::from_secs(10));
+		let custom = Arguments::try_parse_from(["localai_embeddings", "--benchmark", "--duration", "500ms"])
+			.unwrap();
+		assert_eq!(Duration::from(custom.duration), Duration::from_millis(500));
+		assert!(Arguments::try_parse_from(["localai_embeddings", "--duration", "500ms"]).is_err());
+		assert!(Arguments::try_parse_from(["localai_embeddings", "--benchmark", "--duration", "bogus"]).is_err());
+	}
 }

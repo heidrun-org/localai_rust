@@ -11,6 +11,7 @@ This folder contains the public embedding library and the command line interface
 - `chunking.rs`: selects structural boundaries and splits oversized blocks at tokenizer boundaries.
 
 ## Rules
+- The benchmark measures complete passes over the supplied inputs after warm-up and reports original text in mebibytes per measured second.
 - Validate that a selected model is a supported BERT sentence embedding model before loading its weights.
 - Apply the tokenizer attention mask during mean pooling and normalize vectors before comparing them.
 - Keep model inference local to the selected device.

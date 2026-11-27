@@ -68,15 +68,15 @@ On macOS, llama.cpp builds Metal by default, so the file `.cargo/config.toml` se
 
 ```bash
 pnpm --filter localai_llm cli benchmark
-pnpm --filter localai_llm cli benchmark --generations 5 --max-tokens 256
+pnpm --filter localai_llm cli benchmark --duration 5s --max-tokens 256
 pnpm --filter localai_llm cli benchmark --output /tmp/localai_llm-speed.json
 pnpm --silent --filter localai_llm cli benchmark --json
 GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
 ```
 
-The command runs the fixed prompt “Write three sentences about the sea.” After loading the model, the command runs one warm-up generation, then measures three generations of at most 128 tokens by default. The benchmark always takes the most probable token, so each run generates the same text.
+The command runs the fixed prompt “Write three sentences about the sea.” After loading the model and running one warm-up generation, the command measures generations for `--duration <time>`, with a default of `10s`. The current generation finishes when the measurement window expires. Each generation produces at most 128 tokens by default. The benchmark always takes the most probable token, so each run generates the same text.
 
-The table shows, for one generation, the prompt tokens, the generated tokens, and the seconds, then the prompt tokens per second (the evaluation of the prompt) and the generated tokens per second (the generation after the prompt). Peak process resident memory is the high-water mark of the operating system for this process, not a measurement of separate GPU allocations.
+The table shows the measured time, the average token counts and time per generation, and the two throughput rates. Prompt tokens per second uses the measured prompt-processing time. Generated tokens per second uses the measured generation time. Both rates include work from the final completed generation. Peak process resident memory is the high-water mark of the operating system for this process, not a measurement of separate GPU allocations.
 
 With `--json`, the measurements for the single prompt are top-level fields.
 

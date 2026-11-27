@@ -54,7 +54,7 @@ Report the selected answer and its probability, along with any other probabiliti
 - `--model OWNER/REPO[:QUANTIZATION]` selects a compatible remote decision model. A local `.gguf` model path also works. `--check-model-updates` can download new model files and requires approval.
 - `--device cpu|gpu` (also `--backend`) chooses the processor or graphics hardware. Use `cpu` with the installation described below. Graphics hardware requires a compatible build. `--threads N` sets the processor thread count. `--batch-size N` sets the maximum tokens per evaluation and defaults to 2048.
 - `--verbose` writes model logs and timings to standard error. `-h` or `--help` lists the installed options. `-V` or `--version` prints the version.
-- The `benchmark` command times Choice, Noul, and Score on one built-in text after warm-up. Use `--decisions N` to set the number of decisions per type and `--json` for machine-readable results. Run `localai_decisions benchmark --help` for the benchmark options.
+- The `benchmark` command times Choice, Noul, and Score on one built-in text after warm-up. Use `--duration 10s` to set the measurement duration per type (10 seconds by default), `--type choice|noul|score|all` to select the types, and `--json` for machine-readable results. Run `localai_decisions benchmark --help` for the benchmark options.
 
 ## Choose a model by download size
 

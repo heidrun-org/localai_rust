@@ -89,12 +89,12 @@ The native command reports that `wasm` requires a separate browser build. An una
 
 ## Benchmark caller-supplied input
 
-`--benchmark <rounds>` runs one warm-up round, then measures the selected number of rounds. Model loading and JSON output are excluded. Chunking, tokenization, chunk inference, and global-vector computation are included. The output reports documents, chunk embeddings, source bytes, chunk tokens, and padded model positions per second. Chunk token counts include special tokens and any overlap; padded positions include the work added by batching chunks of different lengths.
+Use `--benchmark` to measure embedding throughput. The command loads the model, runs one warm-up pass, then repeatedly embeds the supplied text for `--duration <time>`. The default is `10s`. When the window expires, the current pass finishes. The timed measurement includes chunking, tokenization, chunk inference, and whole-text embedding computation.
 
-For a fixed model and similar chunk lengths, source throughput is useful for estimating large-document runtime: source bytes divided by measured bytes per second, plus model loading. This estimate is approximate: token density differs between English and code, and attention cost grows faster than linearly with the length of an individual chunk. A fixed chunk limit makes whole-document cost roughly proportional to the number of chunks. A small truncated prefix is never reported as processing an entire large file.
+The primary result, `input_mib_per_second`, is the number of mebibytes of original text processed per measured second. A mebibyte is 1,048,576 bytes. Each byte of the original input counts once per completed pass, even with overlapping chunks. The report also gives the completed pass count, total input bytes, actual elapsed time, and rates for chunk embeddings, chunk tokens, and padded model positions.
 
-For example, measure five rounds on a text input from the repository root:
+Use the same text and chunking options for every model you compare. For example, run a five-second benchmark on a file from the repository root:
 
 ```bash
-pnpm --filter localai_embeddings cli --benchmark 5 --text "The cat sleeps on the chair."
+pnpm --filter localai_embeddings cli --benchmark --duration 5s --file README.md
 ```

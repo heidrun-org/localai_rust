@@ -20,7 +20,7 @@ This folder holds the decision library and the command line tool.
 - The engine evaluates one prompt at a time: several prompts in one batch were not faster, and the recurrent layers of Qwen3.5 then change the last digits.
 - The package does not use the crate `llama-cpp-2`, because it hides the raw context that the extended batch needs.
 
-- Benchmark timers exclude model loading and warmup, measure the requested number of fully completed decisions and report total time, average seconds per decision, and decisions per second, and never replace the selected backend.
+- Benchmark timers exclude model loading and warmup, measure each selected type for the requested duration, let the last decision finish, and report completed decisions and rates using actual elapsed time, and never replace the selected backend.
 
 ## Background
 - The decision code that `decision.rs` copies: [server-decision.cpp at v0.6.0](https://github.com/ggml-org/llama.cpp/blob/v0.6.0/tools/server/server-decision.cpp).
