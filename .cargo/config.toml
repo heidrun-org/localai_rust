@@ -1,0 +1,3 @@
+[env]
+# llama-cpp-sys-2 forwards this setting to CMake while building llama.cpp.
+CMAKE_PROJECT_INCLUDE = { value = ".cargo/llamaMetal.cmake", relative = true }

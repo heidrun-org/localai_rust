@@ -71,7 +71,7 @@ impl DecisionEngine {
     /// Finds the model file (in the Hugging Face cache, or downloads it), and loads it.
     pub fn load(config: DecisionConfig) -> Result<Self> {
         if config.device == Device::Gpu && llama::has_gpu_backend() == false {
-            bail!("This build has no GPU backend; build with the feature metal, cuda, or vulkan (see README.md)");
+            bail!("This build has no GPU backend. Run with --backend cpu or build with the metal, cuda, or vulkan Cargo feature.");
         }
         if config.batch_size == 0 {
             bail!("The batch size must be at least 1");

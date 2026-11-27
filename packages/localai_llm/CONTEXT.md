@@ -14,7 +14,7 @@ This package runs a large language model on the computer, with llama.cpp, a Rust
 ## Rules
 - The model runs on the computer and the package never sends the prompt to a hosted inference service.
 - The default model is LiquidAI/LFM2.5-1.2B-Instruct (file `Q4_K_M` of `LiquidAI/LFM2.5-1.2B-Instruct-GGUF`).
-- The default build runs on the processor only: `.cargo/config.toml` sets `GGML_METAL=OFF`, and a GPU build needs a feature (`metal`, `cuda`, or `vulkan`); the feature `metal` also needs `GGML_METAL=ON`.
+- The default build supports the processor. The Cargo features `metal`, `cuda`, and `vulkan` enable the corresponding graphics backend.
 - The version of `llama-cpp-sys-2` is pinned to the version of `localai_decisions`; a new version must still run the default model.
 - Cached model files are used at once by default; `--check-model-updates` asks Hugging Face for a newer file.
 - The package depends on no other package of this repository: the llama.cpp layer and the Hugging Face cache code are copies of the code of `localai_decisions`.

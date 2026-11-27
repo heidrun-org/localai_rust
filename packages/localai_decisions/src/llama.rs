@@ -53,6 +53,11 @@ impl Model {
     /// Loads a GGUF file.
     pub fn load(path: &Path, device: Device, verbose: bool) -> Result<Self> {
         init_backend(verbose);
+		if device == Device::Gpu && unsafe { sys::llama_supports_gpu_offload() } == false {
+			anyhow::bail!(
+				"No compatible GPU is available. Run with --backend cpu or use a computer that supports this GPU backend."
+			);
+		}
         let path_cstring = CString::new(path.to_string_lossy().as_bytes())?;
         // A list that holds only the end mark selects no device, so the model stays on the processor.
         let mut no_device: [sys::ggml_backend_dev_t; 1] = [ptr::null_mut()];

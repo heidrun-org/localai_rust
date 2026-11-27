@@ -85,11 +85,11 @@ After approval, reuse cgx if available. Otherwise, select the published [cgx 0.2
 
 Use an existing compatible Rust toolchain when available. If Rust is absent or incompatible and the user approved a separate installation, use the official [Rustup standalone installer](https://rust-lang.github.io/rustup/installation/index.html) with `--no-modify-path --profile minimal --default-toolchain 1.100.0`, `RUSTUP_HOME` under `<cgx data>/rustup`, and `CARGO_HOME` under `<cgx data>/cargo`. For the build subprocess, set the isolated `RUSTUP_HOME` and prepend the isolated Cargo `bin/` directory to its PATH. For a prerequisite without an approved installation method, report the blocker.
 
-On macOS and Linux the commands below use cgx's default directories. Set `cgx` to the available executable path and `toolchain` to the installed Rustup toolchain name. For an existing Cargo installation without Rustup, omit the `+` argument and point `CARGO` at that Cargo executable. Cargo downloads go under `<cgx data>/cargo` for the skill's build. Use the same isolated `RUSTUP_HOME` on later builds if a separate Rust installation was needed. Set `GGML_METAL=OFF` for the processor build because cgx invokes Cargo from the workspace root.
+On macOS and Linux the commands below use cgx's default directories. Set `cgx` to the available executable path and `toolchain` to the installed Rustup toolchain name. For an existing Cargo installation without Rustup, omit the `+` argument and point `CARGO` at that Cargo executable. Cargo downloads go under `<cgx data>/cargo` for the skill's build. Use the same isolated `RUSTUP_HOME` on later builds if a separate Rust installation was needed.
 
 ```sh
 cgx_data="${XDG_DATA_HOME:-$HOME/.local/share}/cgx"
-tool_path=$(CARGO_HOME="$cgx_data/cargo" GGML_METAL=OFF "$cgx" "+$toolchain" \
+tool_path=$(CARGO_HOME="$cgx_data/cargo" "$cgx" "+$toolchain" \
     --git https://github.com/heidrun-org/localai_rust.git --branch main \
     --prebuilt-binary never --no-exec localai_llm) || exit 1
 test -x "$tool_path" || exit 1
