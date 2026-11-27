@@ -6,10 +6,11 @@ This folder holds the generation library and the command line tool.
 ## Key Exports & Entry Points
 - `lib.rs`: the public library interface: `LlmEngine` (`load`, `generate`, `prompt_text`), `LlmConfig`, `GenerationRequest`, `Generation`, `StopReason`, `SamplerSettings`, `Device`, `Utf8Decoder`, `resolve_model_file`, `DEFAULT_MODEL`, `DEFAULT_SAMPLER`.
 - `llama.rs`: the small safe layer over the C functions of `llama-cpp-sys-2`: the model, the chat template, the context, and the sampler.
-- `main.rs`: the command line tool, which reads a prompt from `--prompt` or from standard input, and writes the text while it grows, or JSON with `--json`.
+- `main.rs`: the command line tool, which reads a prompt from `--prompt` or from standard input, and writes the generation in the requested format.
 - `benchmark.rs`: the command line subcommand `benchmark`, with one built-in prompt, warmup, prompt tokens per second, generated tokens per second, and peak process resident memory.
 
 ## Rules
+- Command results follow the [command output format options](../../../README.md#command-output-formats).
 - Only `llama.rs` calls the C functions of llama.cpp; the other files use its safe types.
 - The chat template comes from the model file, through `llama_chat_apply_template`, which knows a fixed list of templates; the package does not render Jinja templates.
 - The timer of the prompt evaluation stops after `llama_synchronize`, because a GPU evaluation continues after `llama_decode` returns.

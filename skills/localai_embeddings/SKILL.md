@@ -21,7 +21,7 @@ Use the executable on PATH or the absolute path returned by cgx. A first inferen
 
 ### Inputs and output
 
-Pass `-t` or `--text TEXT` for literal text, or `-f` or `--file PATH` for a UTF-8 file. Repeat either option for multiple inputs. With neither option, pipe text into the command or paste it and finish with Control-D. Extract text from binary files before passing it to the tool.
+Pass `-t` or `--text TEXT` for literal text, or `--file PATH` for a UTF-8 file. Repeat either option for multiple inputs. With neither option, pipe text into the command or paste it and finish with Control-D. Extract text from binary files before passing it to the tool.
 
 The command writes JSON with `model`, `backend`, `dimensions`, and `documents`. Read `documents[].global_vector` for a document’s vector or `documents[].chunks` for the text, offsets, token count, and vector of each chunk. The default model produces 384 values per vector. Use `--output PATH` to save the JSON to a file. With `--compare`, supply exactly two inputs and read `cosine_similarity` from the result.
 

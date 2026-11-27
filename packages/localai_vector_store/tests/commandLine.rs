@@ -421,3 +421,31 @@ fn renameWaitsForOpenStoreToClose() -> Result<()> {
 	assert!(readableDirectory.join("store.sqlite3").is_file());
 	Ok(())
 }
+
+/// Checks format selection before and after a subcommand using a populated store.
+#[test]
+fn listSupportsAllOutputFormats() -> Result<()> {
+	let temporaryDirectory = tempfile::tempdir()?;
+	let parentDirectory = temporaryDirectory.path();
+	CommandLine::createWithDescription(parentDirectory, "Markdown *literal*")?;
+	let defaultOutput = CommandLine::json(CommandLine::run(parentDirectory, &["list"])?)?;
+	let jsonOutput = CommandLine::json(CommandLine::run(parentDirectory, &["list", "-f", "json"])?)?;
+	assert_eq!(jsonOutput, defaultOutput);
+
+	let textOutput = CommandLine::run(parentDirectory, &["--format", "text", "list"])?;
+	assert_eq!(textOutput.status.success(), true);
+	let text = String::from_utf8(textOutput.stdout)?;
+	assert_eq!(text.contains(r#"description: "Markdown *literal*""#), true);
+	assert_eq!(text.contains('\x1b'), false);
+
+	let markdownOutput = CommandLine::run(parentDirectory, &["list", "-f", "markdown"])?;
+	assert_eq!(markdownOutput.status.success(), true);
+	let markdown = String::from_utf8(markdownOutput.stdout)?;
+	assert_eq!(markdown.contains(r#"- **description:** "Markdown &#42;literal&#42;""#), true);
+	assert_eq!(markdown.contains('\x1b'), false);
+
+	let invalidOutput = CommandLine::run(parentDirectory, &["list", "-f", "invalid"])?;
+	assert_eq!(invalidOutput.status.success(), false);
+	assert_eq!(invalidOutput.stdout.is_empty(), true);
+	Ok(())
+}

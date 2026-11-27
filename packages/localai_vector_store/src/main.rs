@@ -2,12 +2,16 @@
 
 #![allow(non_snake_case)]
 
+#[path = "outputFormat.rs"]
+mod outputFormat;
+
+use outputFormat::OutputFormat;
 use anyhow::{ensure, Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use localai_vector_store::{EmbeddingModel, Store, StoredEmbedding};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{self, BufReader, Write};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -21,6 +25,9 @@ use uuid::Uuid;
 #[derive(Parser)]
 #[command(version)]
 struct Arguments {
+	/// Select text, Markdown, or JSON output.
+	#[arg(short = 'f', long, value_enum, global = true, value_name = "FORMAT")]
+	format: Option<OutputFormat>,
 	/// Parent folder for stores. Defaults to your application data directory.
 	#[arg(long = "parent-dir", global = true)]
 	parentDirectory: Option<PathBuf>,
@@ -232,8 +239,8 @@ impl EmbeddingOutput {
 ///////////////////////////////////////////////////////////////////////////////
 
 impl Command {
-	/// Runs this operation in parentDirectory and writes its JSON result to standard output.
-	fn run(self, parentDirectory: &Path) -> Result<()> {
+	/// Runs this operation in parentDirectory and writes its formatted result to standard output.
+	fn run(self, parentDirectory: &Path, outputFormat: OutputFormat) -> Result<()> {
 		match self {
 			Self::Create {
 				description,
@@ -247,11 +254,11 @@ impl Command {
 					revision: modelIdentity.revision,
 					dimensions,
 				};
-				Self::_writeJson(&Store::create(parentDirectory, &description, embeddingModel)?.describe()?)
+				outputFormat.write(&Store::create(parentDirectory, &description, embeddingModel)?.describe()?, None)
 			}
-			Self::List => Self::_writeJson(&Store::list(parentDirectory)?),
-			Self::Describe { store } => Self::_writeJson(&Store::open(parentDirectory, store)?.describe()?),
-			Self::RenameFolder { store } => Self::_writeJson(&Store::renameFolder(parentDirectory, store)?),
+			Self::List => outputFormat.write(&Store::list(parentDirectory)?, None),
+			Self::Describe { store } => outputFormat.write(&Store::open(parentDirectory, store)?.describe()?, None),
+			Self::RenameFolder { store } => outputFormat.write(&Store::renameFolder(parentDirectory, store)?, None),
 			Self::Add {
 				store,
 				input,
@@ -263,10 +270,13 @@ impl Command {
 				let embeddingModel = embeddingOutput.embeddingModel(modelIdentity);
 				let storedEmbeddings = embeddingOutput.intoStoredEmbeddings(vectors, sourcePrefix.as_deref())?;
 				let inserted = Store::open(parentDirectory, store)?.add(&embeddingModel, &storedEmbeddings)?;
-				Self::_writeJson(&AddResult {
-					store: Store::formatIdentifier(store),
-					inserted,
-				})
+				outputFormat.write(
+					&AddResult {
+						store: Store::formatIdentifier(store),
+						inserted,
+					},
+					None,
+				)
 			}
 			Self::Search {
 				store,
@@ -281,17 +291,9 @@ impl Command {
 				};
 				let matches =
 					Store::open(parentDirectory, store)?.search(&embeddingModel, &document.globalVector, limit)?;
-				Self::_writeJson(&matches)
+				outputFormat.write(&matches, None)
 			}
 		}
-	}
-
-	/// Writes value as JSON followed by a newline, or returns an output error.
-	fn _writeJson(value: &impl Serialize) -> Result<()> {
-		let mut stdout = io::stdout().lock();
-		serde_json::to_writer_pretty(&mut stdout, value)?;
-		writeln!(stdout)?;
-		Ok(())
 	}
 }
 
@@ -302,5 +304,5 @@ fn main() -> Result<()> {
 		Some(parentDirectory) => parentDirectory,
 		None => Store::defaultParentDirectory()?,
 	};
-	arguments.command.run(&parentDirectory)
+	arguments.command.run(&parentDirectory, arguments.format.unwrap_or(OutputFormat::Json))
 }
