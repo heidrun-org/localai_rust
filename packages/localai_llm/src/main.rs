@@ -103,7 +103,7 @@ mod benchmark;
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Measure the speed of the prompt evaluation and of the generation on built-in prompts.
+    /// Measure prompt evaluation and generation speed on one built-in prompt.
     Benchmark(benchmark::Arguments),
 }
 

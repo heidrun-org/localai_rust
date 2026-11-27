@@ -11,7 +11,7 @@ use std::{
 
 #[derive(Debug, Args)]
 pub(crate) struct Arguments {
-    /// Completed decisions per case, after loading and warmup.
+    /// Completed decisions per decision type, after loading and warmup.
     #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u64).range(1..))]
     decisions: u64,
     /// Print JSON instead of the table.
@@ -20,7 +20,7 @@ pub(crate) struct Arguments {
 }
 
 struct Case {
-    name: String,
+    name: &'static str,
     request: Value,
 }
 
@@ -48,7 +48,7 @@ pub(crate) fn run(
     let engine = DecisionEngine::load(config.clone())?;
     let model_load_seconds = started.elapsed().as_secs_f64();
     let mut results = Vec::new();
-    for case in cases() {
+    for case in Case::_builtIn() {
         let warmup = Instant::now();
         let response = engine.decide(&case.request)?;
         let warmup_seconds = warmup.elapsed().as_secs_f64();
@@ -84,40 +84,38 @@ pub(crate) fn run(
     }, &arguments, output.as_deref())
 }
 
-fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    for (length, text) in [
-        ("short", SHORT_TEXT.to_string()),
-        ("long", LONG_PARAGRAPH.repeat(4)),
-    ] {
-        for (name, question) in [
-            (
-                "Choice",
-                json!({"type": "choice", "instructions": "Which team should handle this?",
-                "criteria": {"billing": null, "shipping": null, "technical": null}}),
-            ),
-            (
-                "Noul",
-                json!({"type": "noul", "instructions": "Does the customer ask for a refund?"}),
-            ),
-            (
-                "Score",
-                json!({"type": "score", "instructions": "How urgent is this request?",
-                "criteria": ["can wait", "this week", "today", "immediately"]}),
-            ),
-        ] {
-            cases.push(Case {
-                name: format!("{name} / {length}"),
-                request: json!({"state": text, "questions": {"decision": question}}),
-            });
-        }
-    }
-    cases
-}
-
-#[cfg(test)]
-fn check_case(case: &Case) {
-    assert_eq!(case.request["questions"].as_object().unwrap().len(), 1);
+impl Case {
+	/// Returns the requests for the three decision types on the same text.
+	#[allow(non_snake_case)]
+	fn _builtIn() -> [Self; 3] {
+		let text = "I was charged twice for my order. Please refund the extra payment today.";
+		[
+			(
+				"Choice",
+				json!({
+					"type": "choice",
+					"instructions": "Which team should handle this?",
+					"criteria": {"billing": null, "shipping": null, "technical": null},
+				}),
+			),
+			(
+				"Noul",
+				json!({"type": "noul", "instructions": "Does the customer ask for a refund?"}),
+			),
+			(
+				"Score",
+				json!({
+					"type": "score",
+					"instructions": "How urgent is this request?",
+					"criteria": ["can wait", "this week", "today", "immediately"],
+				}),
+			),
+		]
+		.map(|(name, question)| Self {
+			name,
+			request: json!({"state": text, "questions": {"decision": question}}),
+		})
+	}
 }
 
 /// Timing of a fixed number of fully completed decisions.
@@ -131,7 +129,7 @@ struct Measurement {
 
 #[derive(Debug, Serialize)]
 struct CaseResult {
-    case: String,
+    case: &'static str,
     input_tokens: usize,
     warmup_seconds: f64,
     #[serde(flatten)]
@@ -149,13 +147,6 @@ struct Report {
     peak_process_resident_bytes: Option<u64>,
     memory_scope: &'static str,
 }
-
-const SHORT_TEXT: &str = "I was charged twice for my order. Please refund the extra payment today.";
-const LONG_PARAGRAPH: &str =
-    "I contacted customer support about the duplicate payment for my order. \
-    The first payment was accepted and the order arrived last week, but my bank statement shows \
-    another charge for the same amount. The online account shows only one purchase. \
-    Please check the billing records and refund the extra payment. I need the money today. ";
 
 fn measure_decisions(
     decisions: u64,
@@ -203,12 +194,12 @@ fn write_report(
         report.model_load_seconds
     );
     println!(
-        "Each case is warmed up, then {} completed decisions are measured.",
+        "Measured {} completed decisions per decision type after warmup.",
         report.decisions_per_case
     );
     println!(
         "{:<24} {:>12} {:>13} {:>16} {:>16}",
-        "Case", "Input tokens", "Total seconds", "Seconds/decision", "Decisions/second"
+        "Decision type", "Input tokens", "Total seconds", "Seconds/decision", "Decisions/second"
     );
     for result in &report.cases {
         println!(
@@ -321,17 +312,20 @@ mod tests {
         assert!(measure_decisions(5, || Ok(()), || Duration::ZERO).is_err());
     }
 
-    #[test]
-    fn benchmark_cases_have_short_and_long_texts_and_one_decision_each() {
-        let cases = cases();
-        assert!(!cases.is_empty());
-        let names: std::collections::BTreeSet<_> = cases.iter().map(|case| &case.name).collect();
-        assert_eq!(names.len(), cases.len());
-        assert!(cases.iter().any(|case| case.name.ends_with("short")));
-        assert!(cases.iter().any(|case| case.name.ends_with("long")));
-        assert!(LONG_PARAGRAPH.repeat(4).len() > SHORT_TEXT.len() * 5);
-        for case in &cases {
-            check_case(case);
-        }
-    }
+	/// Checks that each decision type asks one question about the existing benchmark input.
+	#[test]
+	#[allow(non_snake_case)]
+	fn benchmarkUsesOneTextForAllDecisionTypes() {
+		let cases = Case::_builtIn();
+		assert_eq!(cases.each_ref().map(|case| case.name), ["Choice", "Noul", "Score"]);
+		for (case, decisionType) in cases.iter().zip(["choice", "noul", "score"]) {
+			assert_eq!(
+				case.request["state"],
+				"I was charged twice for my order. Please refund the extra payment today.",
+			);
+			let questions = case.request["questions"].as_object().unwrap();
+			assert_eq!(questions.len(), 1);
+			assert_eq!(questions["decision"]["type"], decisionType);
+		}
+	}
 }

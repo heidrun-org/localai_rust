@@ -103,7 +103,7 @@ Run the reusable benchmark directly through this package's command line:
 pnpm --filter localai_decisions cli benchmark
 ```
 
-The command measures Choice, Noul (yes or no), and Score (ordered levels), each with a short text and a longer text. Each case completes five measured decisions by default. The model loads once, then each case completes a warmup before timing starts. Model loading and warmup are excluded from the speed measurement. Reading the returned probabilities completes GPU work before the timer starts.
+The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. Each decision type runs once before timing starts, then completes five measured decisions by default. Model loading and warmup are excluded from the speed measurement. Reading the returned probabilities completes GPU work before the timer starts.
 
 The table shows the input token count, total measured seconds, average seconds per decision, and decisions per second. Every requested decision finishes, even when one decision takes longer than five seconds. Average seconds per decision is total measured time divided by the number of completed decisions; decisions per second is the number of completed decisions divided by total measured time. The JSON also records the requested and completed counts. Qwen token counts include the prompts used for one question, while Candle token counts include the encoded text and labels, so token counts from the two models are not directly comparable.
 
@@ -121,7 +121,7 @@ pnpm --silent --filter localai_decisions cli benchmark --json
 GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
 ```
 
-The selected backend is used for every case and is never silently replaced by another backend. The short text and long text are fixed in the package so later runs use the same inputs. No dataset download or separate benchmark package is needed.
+The selected backend runs all three decision types on the same fixed text. No dataset download or separate benchmark package is needed.
 
 Peak process resident memory covers model loading, warmup, and measured inference. It is the operating system's high-water mark for this process, not a measurement of separate GPU allocations. MiB means 1,048,576 bytes. Unsupported operating systems omit the memory value. Speed and memory vary with hardware and other running programs.
 

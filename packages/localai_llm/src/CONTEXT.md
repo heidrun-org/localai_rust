@@ -7,7 +7,7 @@ This folder holds the generation library and the command line tool.
 - `lib.rs`: the public library interface: `LlmEngine` (`load`, `generate`, `prompt_text`), `LlmConfig`, `GenerationRequest`, `Generation`, `StopReason`, `SamplerSettings`, `Device`, `Utf8Decoder`, `resolve_model_file`, `DEFAULT_MODEL`, `DEFAULT_SAMPLER`.
 - `llama.rs`: the small safe layer over the C functions of `llama-cpp-sys-2`: the model, the chat template, the context, and the sampler.
 - `main.rs`: the command line tool, which reads a prompt from `--prompt` or from standard input, and writes the text while it grows, or JSON with `--json`.
-- `benchmark.rs`: the command line subcommand `benchmark`, with a short and a long prompt, warmup, prompt tokens per second, generated tokens per second, and peak process resident memory.
+- `benchmark.rs`: the command line subcommand `benchmark`, with one built-in prompt, warmup, prompt tokens per second, generated tokens per second, and peak process resident memory.
 
 ## Rules
 - Only `llama.rs` calls the C functions of llama.cpp; the other files use its safe types.

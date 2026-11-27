@@ -40,7 +40,7 @@ Read the generated `text` before returning it. If `stop_reason` is `max_tokens`,
 - `--model OWNER/REPO[:QUANTIZATION]` selects a compatible remote model. A local `.gguf` model path also works. `--check-model-updates` can download new model files and requires approval.
 - `--device cpu|gpu` (also `--backend`) chooses the processor or graphics hardware. Use `cpu` with the installation described below. Graphics hardware requires a compatible build. `--threads N` sets the processor thread count.
 - `--verbose` writes model logs and timings to standard error. `-h` or `--help` lists the installed options. `-V` or `--version` prints the version.
-- The `benchmark` command measures prompt processing and generation on built-in prompts. Use `--generations N` for the number of generations per case, `--max-tokens N` for the limit per generation, and `--json` for machine-readable results. Run `localai_llm benchmark --help` for the benchmark options.
+- The `benchmark` command measures prompt processing and generation on one built-in prompt. Use `--generations N` for the number of measured generations, `--max-tokens N` for the limit per generation, and `--json` for machine-readable results. Run `localai_llm benchmark --help` for the benchmark options.
 
 ## Choose a model by download size
 

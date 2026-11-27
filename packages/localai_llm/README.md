@@ -74,21 +74,20 @@ pnpm --silent --filter localai_llm cli benchmark --json
 GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
 ```
 
-The command measures two fixed prompts: a short prompt (16 tokens) and a long prompt (515 tokens). The model loads once, then each case completes a warmup before timing starts. Each case then completes 3 measured generations of at most 128 tokens. The benchmark always takes the most probable token, so each run generates the same text.
+The command runs the fixed prompt “Write three sentences about the sea.” After loading the model, the command runs one warm-up generation, then measures three generations of at most 128 tokens by default. The benchmark always takes the most probable token, so each run generates the same text.
 
 The table shows, for one generation, the prompt tokens, the generated tokens, and the seconds, then the prompt tokens per second (the evaluation of the prompt) and the generated tokens per second (the generation after the prompt). Peak process resident memory is the high-water mark of the operating system for this process, not a measurement of separate GPU allocations.
+
+With `--json`, the measurements for the single prompt are top-level fields.
 
 ## Speed
 
 Time on an Apple M1 Pro with the default model, after the model is loaded:
 
-| Case | Processor, 8 threads | Metal |
+| Measurement | Processor, 8 threads | Metal |
 | --- | --- | --- |
-| Short prompt: prompt tokens per second | 237 | 706 |
-| Short prompt: generated tokens per second | 53 | 118 |
-| Long prompt: prompt tokens per second | 251 | 1278 |
-| Long prompt: generated tokens per second | 30 | 118 |
-| Peak process resident memory | 1520 MiB | 836 MiB |
+| Prompt tokens per second | 237 | 706 |
+| Generated tokens per second | 53 | 118 |
 
 ## Tests
 

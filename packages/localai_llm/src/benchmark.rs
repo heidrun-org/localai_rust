@@ -10,7 +10,7 @@ use std::{
 
 #[derive(Debug, Args)]
 pub(crate) struct Arguments {
-    /// Completed generations per case, after loading and warmup.
+    /// Completed generations, after loading and warmup.
     #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(1..))]
     generations: u64,
     /// The largest number of generated tokens of one generation.
@@ -21,11 +21,6 @@ pub(crate) struct Arguments {
     json: bool,
 }
 
-struct Case {
-    name: &'static str,
-    prompt: String,
-}
-
 /// The benchmark always takes the most probable token, so that each run generates the same text.
 const BENCHMARK_SAMPLER: SamplerSettings = SamplerSettings {
     temperature: 0.0,
@@ -34,6 +29,7 @@ const BENCHMARK_SAMPLER: SamplerSettings = SamplerSettings {
     seed: 0,
 };
 
+#[allow(non_snake_case)]
 pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBuf>) -> Result<()> {
     let backend = match config.device {
         Device::Cpu => "cpu",
@@ -53,53 +49,36 @@ pub(crate) fn run(arguments: Arguments, config: LlmConfig, output: Option<PathBu
     let started = Instant::now();
     let engine = LlmEngine::load(config.clone())?;
     let model_load_seconds = started.elapsed().as_secs_f64();
-    let mut results = Vec::new();
-    for case in cases() {
-        let request = GenerationRequest {
-            max_tokens: arguments.max_tokens as usize,
-            sampler: BENCHMARK_SAMPLER,
-            ..GenerationRequest::new(case.prompt.clone())
-        };
-        let warmup = Instant::now();
-        engine.generate(&request, |_| {})?;
-        let warmup_seconds = warmup.elapsed().as_secs_f64();
-        eprintln!("Measuring {}: {} generations...", case.name, arguments.generations);
-        let started = Instant::now();
-        let measurement = measure_generations(arguments.generations, || engine.generate(&request, |_| {}), || started.elapsed())?;
-        results.push(CaseResult {
-            case: case.name,
-            warmup_seconds,
-            measurement,
-        });
-    }
+	let request = GenerationRequest {
+		max_tokens: arguments.max_tokens as usize,
+		sampler: BENCHMARK_SAMPLER,
+		..GenerationRequest::new("Write three sentences about the sea.")
+	};
+	let warmup = Instant::now();
+	engine.generate(&request, |_| {})?;
+	let warmupSeconds = warmup.elapsed().as_secs_f64();
+	eprintln!("Measuring {} generations...", arguments.generations);
+	let started = Instant::now();
+	let measurement = measure_generations(
+		arguments.generations,
+		|| engine.generate(&request, |_| {}),
+		|| started.elapsed(),
+	)?;
     write_report(
         &Report {
             package: "localai_llm",
             model: config.model.clone(),
             backend,
-            generations_per_case: arguments.generations,
             max_tokens: arguments.max_tokens,
             model_load_seconds,
-            cases: results,
+			warmupSeconds,
+			measurement,
             peak_process_resident_bytes: peak_memory(),
             memory_scope: "Process resident-memory high-water mark over model loading, warmup and inference; separate GPU allocations are not measured",
         },
         &arguments,
         output.as_deref(),
     )
-}
-
-fn cases() -> Vec<Case> {
-    vec![
-        Case {
-            name: "short",
-            prompt: SHORT_PROMPT.to_string(),
-        },
-        Case {
-            name: "long",
-            prompt: format!("{}\n\n{LONG_QUESTION}", LONG_PARAGRAPH.repeat(8)),
-        },
-    ]
 }
 
 /// Timing of a fixed number of fully completed generations.
@@ -115,32 +94,22 @@ struct Measurement {
 }
 
 #[derive(Debug, Serialize)]
-struct CaseResult {
-    case: &'static str,
-    warmup_seconds: f64,
-    #[serde(flatten)]
-    measurement: Measurement,
-}
-
-#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
 struct Report {
     package: &'static str,
     model: String,
     backend: &'static str,
-    generations_per_case: u64,
     max_tokens: u64,
     model_load_seconds: f64,
-    cases: Vec<CaseResult>,
+	/// Seconds spent on the generation that precedes the timed measurements.
+	#[serde(rename = "warmup_seconds")]
+	warmupSeconds: f64,
+	/// Timing and token counts for the completed generations.
+	#[serde(flatten)]
+	measurement: Measurement,
     peak_process_resident_bytes: Option<u64>,
     memory_scope: &'static str,
 }
-
-const SHORT_PROMPT: &str = "Write three sentences about the sea.";
-const LONG_PARAGRAPH: &str = "I contacted customer support about the duplicate payment for my order. \
-    The first payment was accepted and the order arrived last week, but my bank statement shows \
-    another charge for the same amount. The online account shows only one purchase. \
-    Please check the billing records and refund the extra payment. I need the money today. ";
-const LONG_QUESTION: &str = "Write a reply to this customer message.";
 
 /// Runs `count` generations, adds their token counts and times, and divides by the total time.
 fn measure_generations(
@@ -189,25 +158,22 @@ fn write_report(report: &Report, arguments: &Arguments, output: Option<&std::pat
     println!("Model: {}", report.model);
     println!("Backend: {}", report.backend);
     println!("Model loaded in {:.2} seconds (excluded from timing)", report.model_load_seconds);
-    println!(
-        "Each case is warmed up, then {} completed generations of at most {} tokens are measured.",
-        report.generations_per_case, report.max_tokens
-    );
-    println!(
-        "{:<8} {:>13} {:>16} {:>18} {:>16} {:>19}",
-        "Case", "Prompt tokens", "Generated tokens", "Seconds/generation", "Prompt tokens/s", "Generated tokens/s"
-    );
-    for result in &report.cases {
-        println!(
-            "{:<8} {:>13} {:>16} {:>18.3} {:>16.1} {:>19.1}",
-            result.case,
-            result.measurement.prompt_tokens,
-            result.measurement.generated_tokens,
-            result.measurement.seconds_per_generation,
-            result.measurement.prompt_tokens_per_second,
-            result.measurement.generated_tokens_per_second
-        );
-    }
+	println!(
+		"Measured {} completed generations of at most {} tokens after warmup.",
+		report.measurement.completed_generations, report.max_tokens
+	);
+	println!(
+		"{:>13} {:>16} {:>18} {:>16} {:>19}",
+		"Prompt tokens", "Generated tokens", "Seconds/generation", "Prompt tokens/s", "Generated tokens/s"
+	);
+	println!(
+		"{:>13} {:>16} {:>18.3} {:>16.1} {:>19.1}",
+		report.measurement.prompt_tokens,
+		report.measurement.generated_tokens,
+		report.measurement.seconds_per_generation,
+		report.measurement.prompt_tokens_per_second,
+		report.measurement.generated_tokens_per_second
+	);
     if let Some(bytes) = report.peak_process_resident_bytes {
         println!("Peak process resident memory: {:.1} MiB", bytes as f64 / 1_048_576.0);
     }
@@ -298,14 +264,5 @@ mod tests {
     fn benchmark_rejects_zero_generations_and_zero_elapsed_time() {
         assert!(measure_generations(0, || panic!("must not run"), || Duration::ZERO).is_err());
         assert!(measure_generations(3, || Ok(generation(10, 10, 1.0, 1.0)), || Duration::ZERO).is_err());
-    }
-
-    #[test]
-    fn benchmark_cases_have_a_short_and_a_long_prompt() {
-        let cases = cases();
-        assert_eq!(cases.len(), 2);
-        assert_eq!(cases[0].name, "short");
-        assert_eq!(cases[1].name, "long");
-        assert!(cases[1].prompt.len() > cases[0].prompt.len() * 20);
     }
 }
