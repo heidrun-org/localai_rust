@@ -6,6 +6,7 @@
   "scripts": {
     "build": "cargo build --release",
     "cli": "cargo run --release --",
+    "benchmark": "cargo run --release --features metal -- benchmark",
     "test": "cargo test --release",
     "test:full": "cargo test --release -- --include-ignored"
   }

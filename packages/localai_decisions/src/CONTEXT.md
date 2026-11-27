@@ -15,7 +15,7 @@ This folder holds the decision library and the command line tool.
 
 ## Rules
 - Command results follow the [command output format options](../../../README.md#command-output-formats).
-- The command line accepts `--backend cpu|gpu` as a visible alias for `--device cpu|gpu`, including the benchmark subcommand.
+- The command line accepts `--backend cpu|gpu` as a visible alias for `--device cpu|gpu`, including the benchmark subcommand. The benchmark defaults to the graphics processor and normal decisions default to the processor.
 - `decision.rs` follows `tools/server/server-decision.cpp` of llama.cpp v0.6.0 function by function, in the same order, so that a change of llama.cpp is easy to copy.
 - Only `llama.rs` calls the C functions of llama.cpp; the other files use its safe types.
 - The engine evaluates one prompt at a time: several prompts in one batch were not faster, and the recurrent layers of Qwen3.5 then change the last digits.

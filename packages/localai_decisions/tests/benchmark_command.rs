@@ -69,8 +69,8 @@ fn invalidBenchmarkDurationAndDeviceFailBeforeModelLoading() {
 #[test]
 fn model_option_is_honored_before_and_after_benchmark() {
     for arguments in [
-        vec!["--model", "no-such-model", "benchmark"],
-        vec!["benchmark", "--model", "no-such-model"],
+        vec!["--model", "no-such-model", "benchmark", "--backend", "cpu"],
+        vec!["benchmark", "--model", "no-such-model", "--backend", "cpu"],
     ] {
         let output = tool().args(arguments).output().unwrap();
         assert!(!output.status.success());
@@ -135,4 +135,18 @@ fn conflicting_device_and_backend_flags_are_rejected_before_loading() {
     assert!(!output.status.success());
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(!error.contains("before timing"), "{error}");
+}
+
+/// Checks the default and explicit graphics selections in a processor-only build.
+#[test]
+#[cfg(not(any(feature = "metal", feature = "cuda", feature = "vulkan")))]
+#[allow(non_snake_case)]
+fn benchmarkRequiresGraphicsByDefault() {
+	for backendArguments in [&[][..], &["--backend", "gpu"][..]] {
+		let output = tool().arg("benchmark").args(backendArguments).output().unwrap();
+		assert_eq!(output.status.success(), false);
+		let error = String::from_utf8_lossy(&output.stderr);
+		assert!(error.contains("This build has no GPU backend"), "{error}");
+		assert!(error.contains("--backend cpu"), "{error}");
+	}
 }

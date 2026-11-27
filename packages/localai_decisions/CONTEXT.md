@@ -9,12 +9,12 @@ This package runs the decision models based on Qwen3.5 on the computer, with lla
 - `server_reference/`: the script that writes the answers of the server. See its own CONTEXT.md.
 - `README.md`: installation, use, the supported models, and the limits.
 - Command to run this folder: `pnpm --filter localai_decisions cli --text "<state>" --question "<question>" --choices <option>,<option>`
-- Command to measure speed: `pnpm --filter localai_decisions cli benchmark`
+- Command to measure speed: `pnpm --filter localai_decisions benchmark`
 - Command to test this folder: `pnpm --filter localai_decisions test`
 
 ## Rules
 - The model runs on the computer and the package never sends the state or the questions to a hosted inference service.
-- The default build runs on the processor only: `.cargo/config.toml` sets `GGML_METAL=OFF`, and a GPU build needs a feature (`metal`, `cuda`, or `vulkan`); the feature `metal` also needs `GGML_METAL=ON`.
+- The default build supports the processor. The Cargo features `metal`, `cuda`, and `vulkan` enable the corresponding graphics backend.
 - The version of `llama-cpp-sys-2` is pinned, because `src/decision.rs` copies the decision code of the llama.cpp version that it builds (v0.6.0); a new version needs the new decision code and new server answers.
 - The package supports the decision types openjev, lev, kev, nimble, and clef, and refuses every other type with an error that names it.
 - Cached model files are used at once by default; `--check-model-updates` asks Hugging Face for a newer file.

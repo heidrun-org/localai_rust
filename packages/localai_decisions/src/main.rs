@@ -44,9 +44,9 @@ struct Arguments {
     #[arg(long, value_delimiter = ',', requires = "question")]
     choices: Vec<String>,
 
-    /// Where the model runs: `gpu` needs a build with the feature metal, cuda, or vulkan.
-    #[arg(long, visible_alias = "backend", global = true, value_enum, default_value_t = DeviceArgument::Cpu)]
-    device: DeviceArgument,
+	/// Where the model runs. Defaults to gpu for benchmark and cpu for decisions.
+	#[arg(long, visible_alias = "backend", global = true, value_enum)]
+	device: Option<DeviceArgument>,
 
     /// The number of processor threads; by default, the number of performance cores, at most 8.
     #[arg(long, global = true)]
@@ -98,7 +98,7 @@ fn run() -> Result<()> {
             benchmark,
             DecisionConfig {
                 model: arguments.model.clone(),
-                device: match arguments.device {
+                device: match arguments.device.unwrap_or(DeviceArgument::Gpu) {
                     DeviceArgument::Cpu => Device::Cpu,
                     DeviceArgument::Gpu => Device::Gpu,
                 },
@@ -116,7 +116,7 @@ fn run() -> Result<()> {
     let started = Instant::now();
     let engine = DecisionEngine::load(DecisionConfig {
         model: arguments.model.clone(),
-        device: match arguments.device {
+        device: match arguments.device.unwrap_or(DeviceArgument::Cpu) {
             DeviceArgument::Cpu => Device::Cpu,
             DeviceArgument::Gpu => Device::Gpu,
         },

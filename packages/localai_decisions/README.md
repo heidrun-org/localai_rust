@@ -90,18 +90,22 @@ The default build runs on the processor only. A build option adds the GPU, and `
 
 ```bash
 cd packages/localai_decisions
-GGML_METAL=ON cargo run --release --features metal -- --backend gpu --text "I was charged twice." --question "Which team?" --choices billing,shipping
+cargo run --release --features metal -- --backend gpu --text "I was charged twice." --question "Which team?" --choices billing,shipping
 ```
 
-On macOS, llama.cpp builds Metal by default, so the file `.cargo/config.toml` sets `GGML_METAL=OFF` and the Metal build sets `GGML_METAL=ON`. The features `cuda` and `vulkan` select an NVIDIA graphics card or Vulkan in the same way; they were not tested. A GPU in a build without a GPU feature gives an error, and the tool never switches to another device by itself. Changing between the two builds compiles llama.cpp again; use another `CARGO_TARGET_DIR` to keep both.
+On a supported Mac, `cargo build --release --features metal` enables Metal in llama.cpp. The features `cuda` and `vulkan` select the corresponding graphics backends. A build without a graphics backend reports an error if you select one. You can run on the processor with `--backend cpu`.
 
 ## Measure speed
 
-Run the reusable benchmark directly through this package's command line:
+On a supported Mac, install the graphics-enabled command from this package directory with `cargo install --path . --features metal`. With Cargo's binary directory on your path, run:
 
 ```bash
-pnpm --filter localai_decisions cli benchmark
+localai_decisions benchmark --duration 5s
+localai_decisions benchmark --model ggml-org/Kev-0.8B-GGUF:Q8_0 --duration 5s
+localai_decisions benchmark --backend cpu --duration 5s
 ```
+
+From the repository root on a supported Mac, run `pnpm --filter localai_decisions benchmark --duration 5s`. For a processor-only build, run `pnpm --filter localai_decisions cli benchmark --backend cpu --duration 5s`.
 
 The command measures Choice, Noul (yes or no), and Score (ordered levels) on one built-in text. The model loads once. Set the total measurement time with `--duration <time>`, which defaults to `10s` and accepts values such as `500ms` or `1m`. The command divides that time equally among the selected types and runs one warm-up decision before measuring each type. Use `--type choice|noul|score|all` to select the types. The default is `all`.
 
@@ -110,16 +114,12 @@ The table shows the input token count, completed decisions, measured seconds, se
 Useful options:
 
 ```bash
-pnpm --filter localai_decisions cli benchmark --type score --duration 1s
-pnpm --filter localai_decisions cli benchmark --output /tmp/localai_decisions-speed.json
-pnpm --silent --filter localai_decisions cli benchmark --json
+localai_decisions benchmark --type score --duration 1s
+localai_decisions benchmark --output /tmp/localai_decisions-speed.json
+localai_decisions benchmark --json
 ```
 
-`--model` selects another model, as for normal decisions. The default backend is the processor. `--backend cpu|gpu` is an alias for `--device cpu|gpu`; both spellings work before or after `benchmark`, and for normal decisions. For Metal, run the following command from this package folder, using the same GPU build requirements as normal decisions:
-
-```bash
-GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
-```
+`--model` selects a decision model. The benchmark defaults to the graphics processor and reports an error when the graphics backend is unavailable. Use `--backend cpu` to select the processor. `--device` is an equivalent spelling. Both options work before or after `benchmark`.
 
 The selected backend runs the selected decision types on the same fixed text. No dataset download or separate benchmark package is needed.
 

@@ -59,10 +59,10 @@ The default build runs on the processor only. A build option adds the GPU, and `
 
 ```bash
 cd packages/localai_llm
-GGML_METAL=ON cargo run --release --features metal -- --backend gpu --prompt "What is the capital of France?"
+cargo run --release --features metal -- --backend gpu --prompt "What is the capital of France?"
 ```
 
-On macOS, llama.cpp builds Metal by default, so the file `.cargo/config.toml` sets `GGML_METAL=OFF` and the Metal build sets `GGML_METAL=ON`. The features `cuda` and `vulkan` select an NVIDIA graphics card or Vulkan in the same way; they were not tested. A GPU in a build without a GPU feature gives an error, and the tool never switches to another device by itself. Changing between the two builds compiles llama.cpp again; use another `CARGO_TARGET_DIR` to keep both.
+On a supported Mac, `cargo build --release --features metal` enables Metal in llama.cpp. The features `cuda` and `vulkan` select the corresponding graphics backends. A build without a graphics backend reports an error if you select one. You can run on the processor with `--backend cpu`.
 
 ## Measure speed
 
@@ -71,7 +71,7 @@ pnpm --filter localai_llm cli benchmark
 pnpm --filter localai_llm cli benchmark --duration 5s --max-tokens 256
 pnpm --filter localai_llm cli benchmark --output /tmp/localai_llm-speed.json
 pnpm --silent --filter localai_llm cli benchmark --json
-GGML_METAL=ON cargo run --release --features metal -- benchmark --backend gpu
+cargo run --release --features metal -- benchmark --backend gpu
 ```
 
 The command runs the fixed prompt “Write three sentences about the sea.” After loading the model and running one warm-up generation, the command measures generations for `--duration <time>`, with a default of `10s`. The current generation finishes when the measurement window expires. Each generation produces at most 128 tokens by default. The benchmark always takes the most probable token, so each run generates the same text.
